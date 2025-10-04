@@ -11,7 +11,8 @@ import {
 import SessionForm from "../components/SessionForm";
 
 // Analytics bits
-import HeatmapCourt from "../components/HeatmapCourt";
+import HeatmapCourt from "../components/HeatmapCourt";               // blocks view
+import HeatmapCourtImage from "../components/HeatmapCourtImage";     // court.png overlay
 import AccuracyTrend from "../components/charts/AccuracyTrend";
 import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
 import AnalyticsFilters from "../components/AnalyticsFilters";
@@ -39,6 +40,9 @@ export default function Dashboard() {
 
   // analytics filters
   const [filters, setFilters] = useState({ windowDays: 30, types: [] });
+
+  // heatmap mode
+  const [heatmapMode, setHeatmapMode] = useState("blocks"); // 'blocks' | 'image'
 
   const load = async (reset = false) => {
     if (!user) return;
@@ -68,10 +72,25 @@ export default function Dashboard() {
 
   // ----- Analytics computed data -----
   const filtered = useMemo(() => filterSessions(rows, filters), [rows, filters]);
-  const byPos = useMemo(() => aggregateByPosition(filtered), [filtered]);
-  const trend = useMemo(() => aggregateAccuracyByDate(filtered), [filtered]);
-  const byType = useMemo(() => aggregateByType(filtered), [filtered]);
-  const kpis = useMemo(() => computeKpis(filtered, { sinceDays: 7 }), [filtered]);
+
+  const aggOpts = { direction: filters.direction, range: filters.range };
+
+  const byPos = useMemo(
+    () => aggregateByPosition(filtered, aggOpts),
+    [filtered, filters] // re-run when filters.direction/range change
+  );
+  const trend = useMemo(
+    () => aggregateAccuracyByDate(filtered, aggOpts),
+    [filtered, filters]
+  );
+  const byType = useMemo(
+    () => aggregateByType(filtered, aggOpts),
+    [filtered, filters]
+  );
+  const kpis = useMemo(
+    () => computeKpis(filtered, { sinceDays: 7, ...aggOpts }),
+    [filtered, filters]
+  );
 
   return (
     <div className="p-6 space-y-4">
@@ -111,6 +130,8 @@ export default function Dashboard() {
           byPos={byPos}
           trend={trend}
           byType={byType}
+          heatmapMode={heatmapMode}
+          setHeatmapMode={setHeatmapMode}
         />
       )}
 
@@ -200,12 +221,55 @@ function LogSection({ rows, cursor, onLoadMore, onCreate, onEdit, onDelete }) {
 }
 
 /* ---------- Analytics UI ---------- */
-function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
+function AnalyticsSection({
+  filters,
+  setFilters,
+  kpis,
+  byPos,
+  trend,
+  byType,
+  heatmapMode,
+  setHeatmapMode,
+}) {
   return (
     <div className="space-y-4">
       <AnalyticsFilters value={filters} onChange={setFilters} />
       <KpiTiles kpis={kpis} />
-      <HeatmapCourt data={byPos} />
+
+      {/* heatmap mode switch */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm opacity-70">Heatmap:</span>
+        <button
+          onClick={() => setHeatmapMode("blocks")}
+          className={`px-3 py-1 rounded-lg border text-sm ${
+            heatmapMode === "blocks" ? "bg-black text-white" : ""
+          }`}
+        >
+          Blocks
+        </button>
+        <button
+          onClick={() => setHeatmapMode("image")}
+          className={`px-3 py-1 rounded-lg border text-sm ${
+            heatmapMode === "image" ? "bg-black text-white" : ""
+          }`}
+        >
+          Court image
+        </button>
+      </div>
+
+      {heatmapMode === "blocks" ? (
+        <HeatmapCourt data={byPos} />
+      ) : (
+        <HeatmapCourtImage
+          data={byPos}
+          src="/court.png"
+          range={filters.range || "3pt"}
+          direction={filters.direction}
+          width={600}
+          height={567}
+        />
+      )}
+
       <AccuracyTrend data={trend} />
       <AttemptsVsMadeByType data={byType} />
     </div>

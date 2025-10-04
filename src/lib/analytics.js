@@ -6,13 +6,13 @@
 
 /**
  * Filter sessions by date range and training types.
- * @param {Array} sessions - raw sessions for a user
+ * @param {Array} sessions
  * @param {{from?: Date, to?: Date, types?: string[]}} opts
  */
 export function filterSessions(sessions, opts = {}) {
   const { from, to, types } = opts;
   return (sessions || []).filter((s) => {
-    const d = new Date(s.date); // 'YYYY-MM-DD'
+    const d = new Date(s.date);
     if (from && d < stripTime(from)) return false;
     if (to && d > stripTime(to)) return false;
     if (types && types.length && !types.includes(s.type)) return false;
@@ -20,19 +20,27 @@ export function filterSessions(sessions, opts = {}) {
   });
 }
 
+/** Check round/zone against optional direction + range filters */
+function passRoundZoneFilters(round, zone, opts = {}) {
+  if (!opts) return true;
+  const { direction, range } = opts;
+  if (direction && round?.direction && round.direction !== direction) return false;
+  const r = zone?.range || round?.range;
+  if (range && r && r !== range) return false;
+  return true;
+}
+
 /** -------------------------
  * Aggregations
  * ------------------------*/
 
-/**
- * Aggregate accuracy by court position across sessions.
- * Returns: { [position]: { made, attempts, acc } }
- */
-export function aggregateByPosition(sessions) {
+/** Accuracy by court position */
+export function aggregateByPosition(sessions, opts) {
   const map = {};
   for (const s of sessions || []) {
     for (const r of s.rounds || []) {
       for (const z of r.zones || []) {
+        if (!passRoundZoneFilters(r, z, opts)) continue;
         const key = z.position || "unknown";
         if (!map[key]) map[key] = { made: 0, attempts: 0 };
         map[key].made += num(z.made);
@@ -47,18 +55,21 @@ export function aggregateByPosition(sessions) {
   return map;
 }
 
-/**
- * Aggregate daily accuracy (for line chart).
- * Returns sorted array: [{ date: 'YYYY-MM-DD', acc }]
- */
-export function aggregateAccuracyByDate(sessions) {
+/** Daily accuracy (for line chart) */
+export function aggregateAccuracyByDate(sessions, opts) {
   const daily = new Map(); // date -> { made, attempts }
   for (const s of sessions || []) {
-    const d = s.date;
-    if (!daily.has(d)) daily.set(d, { made: 0, attempts: 0 });
-    const t = daily.get(d);
-    t.made += num(s?.totals?.made);
-    t.attempts += num(s?.totals?.attempts);
+    let made = 0, attempts = 0;
+    for (const r of s.rounds || []) {
+      for (const z of r.zones || []) {
+        if (!passRoundZoneFilters(r, z, opts)) continue;
+        made += num(z.made);
+        attempts += num(z.attempts);
+      }
+    }
+    if (!daily.has(s.date)) daily.set(s.date, { made: 0, attempts: 0 });
+    const t = daily.get(s.date);
+    t.made += made; t.attempts += attempts;
   }
   return Array.from(daily.entries())
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -68,26 +79,27 @@ export function aggregateAccuracyByDate(sessions) {
     }));
 }
 
-/**
- * Aggregate attempts vs made by training type (for bar chart).
- * Returns array: [{ type, made, attempts }]
- */
-export function aggregateByType(sessions) {
+/** Attempts vs made by training type (bar chart) */
+export function aggregateByType(sessions, opts) {
   const order = ["spot", "catch_shoot", "off_dribble", "run_half"];
   const map = Object.fromEntries(order.map((t) => [t, { made: 0, attempts: 0 }]));
   for (const s of sessions || []) {
+    let made = 0, attempts = 0;
+    for (const r of s.rounds || []) {
+      for (const z of r.zones || []) {
+        if (!passRoundZoneFilters(r, z, opts)) continue;
+        made += num(z.made);
+        attempts += num(z.attempts);
+      }
+    }
     const t = s.type || "spot";
     if (!map[t]) map[t] = { made: 0, attempts: 0 };
-    map[t].made += num(s?.totals?.made);
-    map[t].attempts += num(s?.totals?.attempts);
+    map[t].made += made; map[t].attempts += attempts;
   }
   return Object.entries(map).map(([type, v]) => ({ type, ...v }));
 }
 
-/**
- * Summarize by range (paint/midrange/3pt) across rounds — handy for a legend or table.
- * Returns string like: "3pt: 12/30 (40%) • midrange: 5/10 (50%)"
- */
+/** Summarize by range (optional helper for tables) */
 export function summarizeByRangeString(sessions) {
   const totals = {};
   for (const s of sessions || []) {
@@ -109,33 +121,21 @@ export function summarizeByRangeString(sessions) {
 /** -------------------------
  * KPIs
  * ------------------------*/
-
-/**
- * Compute KPI tiles: accuracy (7d), volume (7d), best zone (min attempts threshold)
- * @param {Array} sessions
- * @param {{sinceDays?: number, minAttemptsBestZone?: number}} opts
- */
 export function computeKpis(
   sessions,
-  { sinceDays = 7, minAttemptsBestZone = 10 } = {}
+  { sinceDays = 7, minAttemptsBestZone = 10, direction, range } = {}
 ) {
   const cutoff = stripTime(addDays(new Date(), -sinceDays));
   const inRange = (sessions || []).filter((s) => new Date(s.date) >= cutoff);
 
-  // Totals for 7d
-  const totals = inRange.reduce(
-    (a, s) => ({
-      made: a.made + num(s?.totals?.made),
-      attempts: a.attempts + num(s?.totals?.attempts),
-    }),
-    { made: 0, attempts: 0 }
-  );
-
-  // Best zone (within 7d)
+  let totals = { made: 0, attempts: 0 };
   const byPos = {};
   for (const s of inRange) {
     for (const r of s.rounds || []) {
       for (const z of r.zones || []) {
+        if (!passRoundZoneFilters(r, z, { direction, range })) continue;
+        totals.made += num(z.made);
+        totals.attempts += num(z.attempts);
         const p = z.position || "unknown";
         if (!byPos[p]) byPos[p] = { m: 0, a: 0 };
         byPos[p].m += num(z.made);
@@ -143,6 +143,7 @@ export function computeKpis(
       }
     }
   }
+
   let best = { position: null, acc: 0, m: 0, a: 0 };
   for (const [p, v] of Object.entries(byPos)) {
     if (v.a >= minAttemptsBestZone) {
@@ -161,17 +162,6 @@ export function computeKpis(
 /** -------------------------
  * Utils
  * ------------------------*/
-function stripTime(d) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function addDays(d, n) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-function num(v) {
-  const n = Number(v || 0);
-  return Number.isFinite(n) ? n : 0;
-}
+function stripTime(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function num(v) { const n = Number(v || 0); return Number.isFinite(n) ? n : 0; }
