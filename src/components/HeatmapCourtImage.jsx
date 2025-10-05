@@ -51,7 +51,7 @@ export default function HeatmapCourtImage({
 
   return (
     <div className="w-full">
-      <div className="text-sm font-semibold mb-2">Court Heatmap</div>
+      <div className="text-sm font-semibold mb-2 text-center">Court Heatmap</div>
 
       <div
         className="relative mx-auto rounded-2xl overflow-hidden border bg-white"
