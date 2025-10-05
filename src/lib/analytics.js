@@ -24,9 +24,23 @@ export function filterSessions(sessions, opts = {}) {
 function passRoundZoneFilters(round, zone, opts = {}) {
   if (!opts) return true;
   const { direction, range } = opts;
-  if (direction && round?.direction && round.direction !== direction) return false;
+
+  // Direction: accept "all", "all_directions", "All directions", undefined
+  if (
+    direction &&
+    direction !== "all" &&
+    direction !== "all_directions" &&
+    direction.toLowerCase?.() !== "all directions" &&
+    round?.direction &&
+    round.direction !== direction
+  ) {
+    return false;
+  }
+
+  // Range: read from zone first, then round
   const r = zone?.range || round?.range;
   if (range && r && r !== range) return false;
+
   return true;
 }
 
@@ -59,7 +73,8 @@ export function aggregateByPosition(sessions, opts) {
 export function aggregateAccuracyByDate(sessions, opts) {
   const daily = new Map(); // date -> { made, attempts }
   for (const s of sessions || []) {
-    let made = 0, attempts = 0;
+    let made = 0,
+      attempts = 0;
     for (const r of s.rounds || []) {
       for (const z of r.zones || []) {
         if (!passRoundZoneFilters(r, z, opts)) continue;
@@ -69,7 +84,8 @@ export function aggregateAccuracyByDate(sessions, opts) {
     }
     if (!daily.has(s.date)) daily.set(s.date, { made: 0, attempts: 0 });
     const t = daily.get(s.date);
-    t.made += made; t.attempts += attempts;
+    t.made += made;
+    t.attempts += attempts;
   }
   return Array.from(daily.entries())
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -84,7 +100,8 @@ export function aggregateByType(sessions, opts) {
   const order = ["spot", "catch_shoot", "off_dribble", "run_half"];
   const map = Object.fromEntries(order.map((t) => [t, { made: 0, attempts: 0 }]));
   for (const s of sessions || []) {
-    let made = 0, attempts = 0;
+    let made = 0,
+      attempts = 0;
     for (const r of s.rounds || []) {
       for (const z of r.zones || []) {
         if (!passRoundZoneFilters(r, z, opts)) continue;
@@ -94,7 +111,8 @@ export function aggregateByType(sessions, opts) {
     }
     const t = s.type || "spot";
     if (!map[t]) map[t] = { made: 0, attempts: 0 };
-    map[t].made += made; map[t].attempts += attempts;
+    map[t].made += made;
+    map[t].attempts += attempts;
   }
   return Object.entries(map).map(([type, v]) => ({ type, ...v }));
 }
@@ -121,47 +139,84 @@ export function summarizeByRangeString(sessions) {
 /** -------------------------
  * KPIs
  * ------------------------*/
-export function computeKpis(
-  sessions,
-  { sinceDays = 7, minAttemptsBestZone = 10, direction, range } = {}
-) {
-  const cutoff = stripTime(addDays(new Date(), -sinceDays));
-  const inRange = (sessions || []).filter((s) => new Date(s.date) >= cutoff);
 
-  let totals = { made: 0, attempts: 0 };
-  const byPos = {};
-  for (const s of inRange) {
+// Label map for best zone
+const POS_LABEL = {
+  left_corner: "Left Corner",
+  left_wing: "Left Wing",
+  center: "Center",
+  right_wing: "Right Wing",
+  right_corner: "Right Corner",
+};
+
+/**
+ * Compute KPIs for the ALREADY-DATE-FILTERED sessions.
+ * Dashboard should pass sessions that already match the selected window (7d/30d/90d).
+ * We only respect `range` and `direction` here so KPIs match the heatmaps.
+ *
+ * Returns:
+ *  - acc: overall accuracy % (0..100)
+ *  - volume: total attempts
+ *  - bestZone: { key, label, acc } | null
+ */
+export function computeKpis(sessions = [], opts = {}) {
+  const { range, direction } = opts || {};
+
+  let totalMade = 0;
+  let totalAttempts = 0;
+
+  const perZone = {
+    left_corner: { made: 0, attempts: 0 },
+    left_wing: { made: 0, attempts: 0 },
+    center: { made: 0, attempts: 0 },
+    right_wing: { made: 0, attempts: 0 },
+    right_corner: { made: 0, attempts: 0 },
+  };
+
+  for (const s of sessions) {
     for (const r of s.rounds || []) {
       for (const z of r.zones || []) {
-        if (!passRoundZoneFilters(r, z, { direction, range })) continue;
-        totals.made += num(z.made);
-        totals.attempts += num(z.attempts);
-        const p = z.position || "unknown";
-        if (!byPos[p]) byPos[p] = { m: 0, a: 0 };
-        byPos[p].m += num(z.made);
-        byPos[p].a += num(z.attempts);
+        if (!passRoundZoneFilters(r, z, { range, direction })) continue;
+
+        const made = num(z.made);
+        const att = num(z.attempts);
+        totalMade += made;
+        totalAttempts += att;
+
+        if (perZone[z.position]) {
+          perZone[z.position].made += made;
+          perZone[z.position].attempts += att;
+        }
       }
     }
   }
 
-  let best = { position: null, acc: 0, m: 0, a: 0 };
-  for (const [p, v] of Object.entries(byPos)) {
-    if (v.a >= minAttemptsBestZone) {
-      const acc = Math.round((v.m / v.a) * 100);
-      if (acc > best.acc) best = { position: p, acc, m: v.m, a: v.a };
+  const acc = totalAttempts ? Math.round((totalMade / totalAttempts) * 100) : 0;
+  const volume = totalAttempts;
+
+  // find best zone by accuracy (with at least 1 attempt)
+  let best = null;
+  for (const key of Object.keys(perZone)) {
+    const { made, attempts } = perZone[key];
+    if (!attempts) continue;
+    const zoneAcc = Math.round((made / attempts) * 100);
+    if (!best || zoneAcc > best.acc) {
+      best = { key, label: POS_LABEL[key], acc: zoneAcc };
     }
   }
 
-  return {
-    acc7: totals.attempts ? Math.round((totals.made / totals.attempts) * 100) : 0,
-    vol7: totals.attempts,
-    bestZone: best.position ? best : null,
-  };
+  return { acc, volume, bestZone: best };
 }
 
 /** -------------------------
  * Utils
  * ------------------------*/
-function stripTime(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
-function num(v) { const n = Number(v || 0); return Number.isFinite(n) ? n : 0; }
+function stripTime(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function num(v) {
+  const n = Number(v || 0);
+  return Number.isFinite(n) ? n : 0;
+}

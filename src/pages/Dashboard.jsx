@@ -61,10 +61,21 @@ export default function Dashboard() {
   };
 
   const onSave = async (data) => {
-    if (editing.id) await updateSession(editing.id, data);
-    else await createSession(data);
-    setEditing(null);
-    await load(true);
+    try {
+     // always stamp ownership on the payload
+      const payload = { ...data, userId: user.uid };
+
+      if (editing?.id) {
+        await updateSession(editing.id, payload);
+      } else {
+        await createSession(payload);
+      }
+      setEditing(null);
+      await load(true);
+    } catch (err) {
+      console.error("[Dashboard] save failed:", err);
+      alert(err?.message || "Failed to save session");
+    }
   };
 
   // ----- Analytics computed data -----
@@ -85,7 +96,7 @@ export default function Dashboard() {
     [filtered, filters]
   );
   const kpis = useMemo(
-    () => computeKpis(filtered, { sinceDays: 7, ...aggOpts }),
+    () => computeKpis(filtered, { sinceDays: filters.windowDays || 7, ...aggOpts }),
     [filtered, filters]
   );
 
@@ -220,7 +231,7 @@ function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
   return (
     <div className="space-y-4">
       <AnalyticsFilters value={filters} onChange={setFilters} />
-      <KpiTiles kpis={kpis} />
+      <KpiTiles kpis={kpis} windowDays={filters.windowDays || 7} />
 
       {/* Heatmaps side-by-side (stacked on mobile) */}
       <div className="grid grid-cols-1 lg:grid-cols-[380px,1fr] gap-6 items-start">

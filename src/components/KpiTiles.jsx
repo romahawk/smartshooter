@@ -1,29 +1,26 @@
 // src/components/KpiTiles.jsx
-import React from "react";
+export default function KpiTiles({ kpis = {}, windowDays = 7 }) {
+  const suffix = `(${windowDays}d)`;
+  const accText = typeof kpis.acc === "number" ? `${kpis.acc}%` : "0%";
+  const volText = typeof kpis.volume === "number" ? kpis.volume : 0;
+  const bestText = kpis.bestZone
+    ? `${kpis.bestZone.label} — ${kpis.bestZone.acc}%`
+    : "—";
 
-export default function KpiTiles({ kpis = { acc7: 0, vol7: 0, bestZone: null } }) {
-  const { acc7, vol7, bestZone } = kpis || {};
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <Tile title="Accuracy (7d)">{acc7}%</Tile>
-      <Tile title="Volume (7d)">{vol7}</Tile>
-      <Tile title="Best Zone">
-        {bestZone ? (
-          <div className="text-sm">
-            <div className="font-medium capitalize">{bestZone.position.replaceAll("_"," ")}</div>
-            <div className="opacity-70">{bestZone.m}/{bestZone.a} ({bestZone.acc}%)</div>
-          </div>
-        ) : "—"}
-      </Tile>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <KpiCard title={`Accuracy ${suffix}`} value={accText} />
+      <KpiCard title={`Volume ${suffix}`} value={volText} />
+      <KpiCard title="Best Zone" value={bestText} />
     </div>
   );
 }
 
-function Tile({ title, children }) {
+function KpiCard({ title, value }) {
   return (
     <div className="border rounded-2xl p-4">
-      <div className="text-xs uppercase tracking-wide opacity-60">{title}</div>
-      <div className="text-2xl font-semibold mt-1">{children}</div>
+      <div className="text-xs uppercase tracking-wide opacity-70">{title}</div>
+      <div className="text-2xl font-bold mt-1">{value}</div>
     </div>
   );
 }
