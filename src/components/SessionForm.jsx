@@ -10,6 +10,19 @@ import {
   normalizeInitial,
 } from "../lib/models";
 
+/** map the visual order of positions based on direction */
+function orderForDirection(dir) {
+  // support both label and canonical values just in case
+  const isRTL =
+    dir === "R→L" ||
+    dir === "R-L" ||
+    dir === "right_to_left" ||
+    dir === "rtl";
+  return isRTL
+    ? ["right_corner", "right_wing", "center", "left_wing", "left_corner"]
+    : ["left_corner", "left_wing", "center", "right_wing", "right_corner"]; // static/L→R
+}
+
 export default function SessionForm({ initial, onSubmit, onCancel }) {
   const [model, setModel] = useState(normalizeInitial(initial));
 
@@ -192,9 +205,9 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
             </button>
           </div>
 
-          {/* Zone cards: 5 positions; Attempts are read-only and mirror shotsPerZone */}
+          {/* Zone cards: visual order depends on direction */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            {ZONE_POSITIONS.map((pos) => {
+            {(orderForDirection(r.direction) || ZONE_POSITIONS).map((pos) => {
               const z =
                 r.zones.find((x) => x.position === pos) || {
                   position: pos,

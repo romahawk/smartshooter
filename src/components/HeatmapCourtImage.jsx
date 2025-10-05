@@ -1,6 +1,7 @@
 // src/components/HeatmapCourtImage.jsx
 import React from "react";
 
+/** -------- Display labels by key -------- */
 const LABEL = {
   left_corner: "Left Corner",
   left_wing: "Left Wing",
@@ -9,99 +10,144 @@ const LABEL = {
   right_corner: "Right Corner",
 };
 
+/** -------- Heat box coordinates (normalized 0..1) --------
+ * These are tuned for a 600x567 half-court image, but since we
+ * multiply by width/height they scale cleanly.
+ * You can tweak x,y,w,h if you want to fine-tune positions.
+ */
+const ZONES_FOR_RANGE = {
+  "3pt": [
+    // corners: skinny vertical boxes hugging baselines
+    { key: "left_corner",  x: 0.005, y: 0.77, w: 0.05, h: 0.22 },
+    { key: "right_corner", x: 0.945, y: 0.77, w: 0.05, h: 0.22 },
+    // wings & center above the arc
+    { key: "left_wing",  x: 0.10, y: 0.4, w: 0.13, h: 0.10 },
+    { key: "center",     x: 0.435, y: 0.26, w: 0.13, h: 0.12 },
+    { key: "right_wing", x: 0.775, y: 0.4, w: 0.13, h: 0.10 },
+  ],
+  midrange: [
+    { key: "left_corner",  x: 0.12, y: 0.85, w: 0.13, h: 0.12 },
+    { key: "left_wing",    x: 0.19, y: 0.6, w: 0.13, h: 0.12 },
+    { key: "center",       x: 0.43, y: 0.45, w: 0.14, h: 0.13 },
+    { key: "right_wing",   x: 0.68, y: 0.6, w: 0.13, h: 0.12 },
+    { key: "right_corner", x: 0.75, y: 0.85, w: 0.13, h: 0.12 },
+  ],
+  paint: [
+    { key: "left_corner",  x: 0.34, y: 0.85, w: 0.10, h: 0.10 },
+    { key: "center",       x: 0.45, y: 0.6, w: 0.10, h: 0.10 },
+    { key: "right_corner", x: 0.56, y: 0.85, w: 0.10, h: 0.10 },
+    // lightly place wings to suggest short-mid paint kickouts
+    { key: "left_wing",    x: 0.35, y: 0.70, w: 0.10, h: 0.10 },
+    { key: "right_wing",   x: 0.55, y: 0.7, w: 0.10, h: 0.10 },
+  ],
+};
+
+/** -------- Color scale (red -> yellow -> green) -------- */
+function colorForAcc(acc = 0) {
+  const v = Math.max(0, Math.min(100, acc));
+  const mix = (a, b, t) => Math.round(a + (b - a) * t);
+  let r, g, b;
+  if (v <= 50) {
+    const t = v / 50;
+    r = mix(254, 253, t);
+    g = mix(226, 230, t);
+    b = mix(226, 138, t);
+  } else {
+    const t = (v - 50) / 50;
+    r = mix(253, 187, t);
+    g = mix(230, 247, t);
+    b = mix(138, 208, t);
+  }
+  return `rgb(${r},${g},${b})`;
+}
+
 /**
- * data: { [position]: { made, attempts, acc } }
- * range: 'paint' | 'midrange' | '3pt'
- * direction: reserved for future (L->R / R->L specific layouts)
+ * HeatmapCourtImage
+ * @param {{
+ *   data: Record<string,{made:number,attempts:number,acc:number}>,
+ *   src?: string,
+ *   range?: "3pt"|"midrange"|"paint",
+ *   direction?: string,           // not used for placement, present for future
+ *   width?: number,
+ *   height?: number,
+ *   title?: string,
+ *   titleAlign?: "left"|"center"|"right",
+ *   flip?: boolean,               // vertical flip (offense view)
+ * }} props
  */
 export default function HeatmapCourtImage({
   data = {},
   src = "/court.png",
   range = "3pt",
-  direction,
+  direction,           // reserved for future use (e.g., LR/RL mirroring)
   width = 600,
   height = 567,
+  title = "Court Heatmap",
+  titleAlign = "center",
+  flip = true,         // set to true to show offense (vertical flip)
 }) {
-  // Percent-based overlay rectangles, tuned for a 600x567 half-court image.
-  const ZONES = {
-    paint: {
-      left_corner:  { left: 35.5, top: 81,   w: 8, h: 12 }, // low block L
-      left_wing:    { left: 35.5, top: 63.5, w: 8,   h: 12 }, // left lane
-      center:       { left: 46, top: 60,   w: 8,   h: 12 }, // restricted area
-      right_wing:   { left: 56.5,   top: 63.5, w: 8,   h: 12 }, // right lane
-      right_corner: { left: 57.5, top: 81,   w: 8, h: 12 }, // low block R
-    },
-    midrange: {
-      left_corner:  { left: 15,   top: 81, w: 11.5, h: 14 },
-      left_wing:    { left: 20.5, top: 52,   w: 11.5, h: 14 },
-      center:       { left: 44,   top: 44,   w: 11.5,   h: 14 },
-      right_wing:   { left: 68, top: 52,   w: 11.5, h: 14 },
-      right_corner: { left: 74.5, top: 81, w: 11.5, h: 14 },
-    },
-    "3pt": {
-      left_corner:  { left: 0.5, top: 74, w: 6,  h: 25 }, // deep corner L
-      left_wing:    { left: 4,   top: 31.5, w: 16,  h: 18 }, // beyond arc L
-      center:       { left: 41,   top: 20.5, w: 16,  h: 18 }, // top of key 3
-      right_wing:   { left: 80,   top: 31.5, w: 16,  h: 18 }, // beyond arc R
-      right_corner: { left: 94, top: 74, w: 6,  h: 25 }, // deep corner R
-    },
-  };
-
-  const ZONE_POS = ZONES[range] || ZONES["3pt"];
+  const boxes = ZONES_FOR_RANGE[range] || ZONES_FOR_RANGE["3pt"];
 
   return (
     <div className="w-full">
-      <div className="text-sm font-semibold mb-2">Court Heatmap</div>
+      <div className={`text-sm font-semibold mb-2 text-${titleAlign}`}>{title}</div>
 
+      {/* Flip the entire court vertically; counter-flip each box content */}
       <div
-        className="relative mx-auto rounded-2xl overflow-hidden border bg-white"
-        style={{ width: "100%", maxWidth: width, aspectRatio: `${width}/${height}` }}
+        className="relative mx-auto"
+        style={{
+          width,
+          height,
+          transform: flip ? "scaleY(-1)" : "none",
+          transformOrigin: "center",
+        }}
       >
         <img
           src={src}
-          alt="Court"
-          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
+          alt="court"
+          className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+          draggable={false}
         />
 
-        {Object.entries(ZONE_POS).map(([pos, rect]) => {
-          const v = data[pos] || { acc: 0, made: 0, attempts: 0 };
-          const bg = colorForAcc(v.acc);
+        {boxes.map((z) => {
+          const stat = data[z.key] || { acc: 0, made: 0, attempts: 0 };
+          const bg = colorForAcc(stat.acc);
+
+          // position & size in pixels
+          const style = {
+            left: z.x * width,
+            top: z.y * height,
+            width: z.w * width,
+            height: z.h * height,
+            background: bg,
+            transform: flip ? "scaleY(-1)" : "none", // keep text upright
+            transformOrigin: "center",
+          };
+
           return (
             <div
-              key={pos}
-              className="absolute rounded-xl border"
-              style={{
-                left: `${rect.left}%`,
-                top: `${rect.top}%`,
-                width: `${rect.w}%`,
-                height: `${rect.h}%`,
-                background: bg,
-                opacity: 0.75,
-              }}
-              title={`${LABEL[pos]} — ${v.made}/${v.attempts} (${v.acc}%)`}
-            />
+              key={z.key}
+              className="absolute rounded-xl border flex items-center justify-center p-1"
+              style={style}
+              title={`${LABEL[z.key]} — ${stat.made}/${stat.attempts} (${stat.acc}%)`}
+            >
+              <div className="text-[10px] text-black/90 text-center leading-tight">
+                <div className="font-medium">{LABEL[z.key]}</div>
+                <div className="opacity-80">
+                  {stat.made}/{stat.attempts} ({stat.acc}%)
+                </div>
+              </div>
+            </div>
           );
         })}
       </div>
 
-      {/* <div className="flex items-center gap-2 mt-2 text-xs">
+      {/* Legend (not flipped) */}
+      <div className="flex items-center gap-2 mt-2 text-xs">
         <span>Low</span>
         <div className="h-2 flex-1 rounded bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0]" />
         <span>High</span>
-      </div> */}
+      </div>
     </div>
   );
-}
-
-function colorForAcc(acc = 0) {
-  const clamp = (n) => Math.max(0, Math.min(100, n));
-  const v = clamp(acc);
-  const mix = (a, b, t) => Math.round(a + (b - a) * t);
-  let r, g, b;
-  if (v <= 50) {
-    const t = v / 50; r = mix(254, 253, t); g = mix(226, 230, t); b = mix(226, 138, t);
-  } else {
-    const t = (v - 50) / 50; r = mix(253, 187, t); g = mix(230, 247, t); b = mix(138, 208, t);
-  }
-  return `rgb(${r},${g},${b})`;
 }
