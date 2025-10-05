@@ -41,9 +41,6 @@ export default function Dashboard() {
   // analytics filters
   const [filters, setFilters] = useState({ windowDays: 30, types: [] });
 
-  // heatmap mode
-  const [heatmapMode, setHeatmapMode] = useState("blocks"); // 'blocks' | 'image'
-
   const load = async (reset = false) => {
     if (!user) return;
     const res = await listSessions(user.uid, 10, reset ? null : cursor);
@@ -77,7 +74,7 @@ export default function Dashboard() {
 
   const byPos = useMemo(
     () => aggregateByPosition(filtered, aggOpts),
-    [filtered, filters] // re-run when filters.direction/range change
+    [filtered, filters]
   );
   const trend = useMemo(
     () => aggregateAccuracyByDate(filtered, aggOpts),
@@ -130,8 +127,6 @@ export default function Dashboard() {
           byPos={byPos}
           trend={trend}
           byType={byType}
-          heatmapMode={heatmapMode}
-          setHeatmapMode={setHeatmapMode}
         />
       )}
 
@@ -221,45 +216,17 @@ function LogSection({ rows, cursor, onLoadMore, onCreate, onEdit, onDelete }) {
 }
 
 /* ---------- Analytics UI ---------- */
-function AnalyticsSection({
-  filters,
-  setFilters,
-  kpis,
-  byPos,
-  trend,
-  byType,
-  heatmapMode,
-  setHeatmapMode,
-}) {
+function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
   return (
     <div className="space-y-4">
       <AnalyticsFilters value={filters} onChange={setFilters} />
       <KpiTiles kpis={kpis} />
 
-      {/* heatmap mode switch */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm opacity-70">Heatmap:</span>
-        <button
-          onClick={() => setHeatmapMode("blocks")}
-          className={`px-3 py-1 rounded-lg border text-sm ${
-            heatmapMode === "blocks" ? "bg-black text-white" : ""
-          }`}
-        >
-          Blocks
-        </button>
-        <button
-          onClick={() => setHeatmapMode("image")}
-          className={`px-3 py-1 rounded-lg border text-sm ${
-            heatmapMode === "image" ? "bg-black text-white" : ""
-          }`}
-        >
-          Court image
-        </button>
-      </div>
-
-      {heatmapMode === "blocks" ? (
-        <HeatmapCourt data={byPos} />
-      ) : (
+      {/* Heatmaps side-by-side (stacked on mobile) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[380px,1fr] gap-6 items-start">
+        <div className="lg:sticky lg:top-4">
+          <HeatmapCourt data={byPos} layout="stack" />
+        </div>
         <HeatmapCourtImage
           data={byPos}
           src="/court.png"
@@ -268,7 +235,7 @@ function AnalyticsSection({
           width={600}
           height={567}
         />
-      )}
+      </div>
 
       <AccuracyTrend data={trend} />
       <AttemptsVsMadeByType data={byType} />

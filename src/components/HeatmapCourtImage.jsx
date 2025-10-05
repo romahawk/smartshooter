@@ -39,11 +39,11 @@ export default function HeatmapCourtImage({
       right_corner: { left: 74.5, top: 81, w: 11.5, h: 14 },
     },
     "3pt": {
-      left_corner:  { left: 0.5, top: 78, w: 7,  h: 25 }, // deep corner L
+      left_corner:  { left: 0.5, top: 74, w: 6,  h: 25 }, // deep corner L
       left_wing:    { left: 4,   top: 31.5, w: 16,  h: 18 }, // beyond arc L
       center:       { left: 41,   top: 20.5, w: 16,  h: 18 }, // top of key 3
       right_wing:   { left: 80,   top: 31.5, w: 16,  h: 18 }, // beyond arc R
-      right_corner: { left: 93, top: 78, w: 7,  h: 25 }, // deep corner R
+      right_corner: { left: 94, top: 74, w: 6,  h: 25 }, // deep corner R
     },
   };
 
@@ -84,11 +84,11 @@ export default function HeatmapCourtImage({
         })}
       </div>
 
-      <div className="flex items-center gap-2 mt-2 text-xs">
+      {/* <div className="flex items-center gap-2 mt-2 text-xs">
         <span>Low</span>
         <div className="h-2 flex-1 rounded bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0]" />
         <span>High</span>
-      </div>
+      </div> */}
     </div>
   );
 }

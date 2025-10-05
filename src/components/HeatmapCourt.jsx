@@ -10,19 +10,31 @@ const LABEL = {
   right_corner: "Right Corner",
 };
 
-export default function HeatmapCourt({ data = {}, onSelect }) {
+/**
+ * Props:
+ *  - data: { [position]: { made, attempts, acc } }
+ *  - layout: "row" | "stack"
+ *      "row"   -> responsive row (5 columns on md+, single column on mobile)
+ *      "stack" -> always vertical list (used next to court image)
+ */
+export default function HeatmapCourt({ data = {}, layout = "row" }) {
+  const gridClass =
+    layout === "stack"
+      ? "grid grid-cols-1 gap-2"
+      : "grid grid-cols-1 md:grid-cols-5 gap-2";
+
   return (
     <div className="w-full">
-      <div className="text-sm font-semibold mb-2">Court Heatmap</div>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+      <div className="text-sm font-semibold mb-2">Zones Heatmap</div>
+
+      <div className={gridClass}>
         {POS.map((p) => {
           const v = data[p] || { acc: 0, made: 0, attempts: 0 };
           const bg = colorForAcc(v.acc);
           return (
-            <button
+            <div
               key={p}
-              onClick={() => onSelect?.(p)}
-              className="rounded-xl p-3 text-left border transition"
+              className="rounded-xl p-3 text-left border"
               style={{ background: bg }}
               title={`${LABEL[p]} — ${v.made}/${v.attempts} (${v.acc}%)`}
             >
@@ -30,10 +42,11 @@ export default function HeatmapCourt({ data = {}, onSelect }) {
               <div className="text-xs opacity-80">
                 {v.made}/{v.attempts} ({v.acc}%)
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
+
       <div className="flex items-center gap-2 mt-2 text-xs">
         <span>Low</span>
         <div className="h-2 flex-1 rounded bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0]" />
@@ -43,20 +56,22 @@ export default function HeatmapCourt({ data = {}, onSelect }) {
   );
 }
 
-// green for high, red for low (very simple scale)
+// Simple red → yellow → green scale
 function colorForAcc(acc = 0) {
   const clamp = (n) => Math.max(0, Math.min(100, n));
   const v = clamp(acc);
-  // interpolate from red(254,226,226) -> yellow(253,230,138) -> green(187,247,208)
-  // piecewise: 0-50 -> red->yellow, 50-100 -> yellow->green
   const mix = (a, b, t) => Math.round(a + (b - a) * t);
   let r, g, b;
   if (v <= 50) {
     const t = v / 50;
-    r = mix(254, 253, t); g = mix(226, 230, t); b = mix(226, 138, t);
+    r = mix(254, 253, t);
+    g = mix(226, 230, t);
+    b = mix(226, 138, t);
   } else {
     const t = (v - 50) / 50;
-    r = mix(253, 187, t); g = mix(230, 247, t); b = mix(138, 208, t);
+    r = mix(253, 187, t);
+    g = mix(230, 247, t);
+    b = mix(138, 208, t);
   }
   return `rgb(${r},${g},${b})`;
 }
