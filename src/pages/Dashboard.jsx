@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { newSession } from "../lib/models";
 import {
@@ -10,11 +10,36 @@ import {
 } from "../lib/sessionApi";
 import SessionForm from "../components/SessionForm";
 
+// Analytics bits
+import HeatmapCourt from "../components/HeatmapCourt";               // blocks view
+import HeatmapCourtImage from "../components/HeatmapCourtImage";     // court.png overlay
+import AccuracyTrend from "../components/charts/AccuracyTrend";
+import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
+import AnalyticsFilters from "../components/AnalyticsFilters";
+import KpiTiles from "../components/KpiTiles";
+import {
+  filterSessions,
+  aggregateByPosition,
+  aggregateAccuracyByDate,
+  aggregateByType,
+  computeKpis,
+} from "../lib/analytics";
+
 export default function Dashboard() {
   const { user, logout } = useAuthStore();
+
+  // data + pagination
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
+
+  // editor
   const [editing, setEditing] = useState(null); // null | {id?, ...data}
+
+  // tabs
+  const [tab, setTab] = useState("log"); // 'log' | 'analytics'
+
+  // analytics filters
+  const [filters, setFilters] = useState({ windowDays: 30, types: [] });
 
   const load = async (reset = false) => {
     if (!user) return;
@@ -42,27 +67,99 @@ export default function Dashboard() {
     await load(true);
   };
 
+  // ----- Analytics computed data -----
+  const filtered = useMemo(() => filterSessions(rows, filters), [rows, filters]);
+
+  const aggOpts = { direction: filters.direction, range: filters.range };
+
+  const byPos = useMemo(
+    () => aggregateByPosition(filtered, aggOpts),
+    [filtered, filters]
+  );
+  const trend = useMemo(
+    () => aggregateAccuracyByDate(filtered, aggOpts),
+    [filtered, filters]
+  );
+  const byType = useMemo(
+    () => aggregateByType(filtered, aggOpts),
+    [filtered, filters]
+  );
+  const kpis = useMemo(
+    () => computeKpis(filtered, { sinceDays: 7, ...aggOpts }),
+    [filtered, filters]
+  );
+
   return (
     <div className="p-6 space-y-4">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex flex-wrap gap-3 justify-between items-center">
         <h1 className="text-xl">Welcome, {user?.email}</h1>
         <button onClick={logout} className="border rounded-lg px-3 py-2">
           Logout
         </button>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 border-b">
+        <TabButton active={tab === "log"} onClick={() => setTab("log")}>
+          Log
+        </TabButton>
+        <TabButton active={tab === "analytics"} onClick={() => setTab("analytics")}>
+          Analytics
+        </TabButton>
+      </div>
+
+      {/* Content */}
+      {tab === "log" ? (
+        <LogSection
+          rows={rows}
+          cursor={cursor}
+          onLoadMore={() => load()}
+          onCreate={onCreateClick}
+          onEdit={onEditClick}
+          onDelete={onDeleteClick}
+        />
+      ) : (
+        <AnalyticsSection
+          filters={filters}
+          setFilters={setFilters}
+          kpis={kpis}
+          byPos={byPos}
+          trend={trend}
+          byType={byType}
+        />
+      )}
+
+      {/* Editor modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
+          <div className="bg-white rounded-2xl p-4 max-w-5xl w-full max-h-[90vh] overflow-auto">
+            <h2 className="text-lg font-semibold mb-3">
+              {editing.id ? "Edit session" : "New session"}
+            </h2>
+            <SessionForm initial={editing} onSubmit={onSave} onCancel={() => setEditing(null)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Log (Sessions list) ---------- */
+function LogSection({ rows, cursor, onLoadMore, onCreate, onEdit, onDelete }) {
+  return (
+    <div className="space-y-3">
       <div className="flex gap-2">
-        <button onClick={onCreateClick} className="bg-black text-white rounded-xl px-4 py-2">
+        <button onClick={onCreate} className="bg-black text-white rounded-xl px-4 py-2">
           New session
         </button>
         {cursor && (
-          <button onClick={() => load()} className="border rounded-xl px-3 py-2">
+          <button onClick={onLoadMore} className="border rounded-xl px-3 py-2">
             Load more
           </button>
         )}
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto border rounded-2xl">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
@@ -81,12 +178,7 @@ export default function Dashboard() {
               <tr key={r.id} className="border-t align-top">
                 <td className="p-3 whitespace-nowrap">{r.date}</td>
                 <td className="p-3 whitespace-nowrap">{r.type}</td>
-
-                {/* Zones summary */}
-                <td className="p-3">
-                  {summarizeByRange(r) || "—"}
-                </td>
-
+                <td className="p-3">{summarizeByRange(r) || "—"}</td>
                 <td className="p-3">{r.rounds?.length ?? 0}</td>
                 <td className="p-3">
                   {r.totals?.attempts
@@ -94,22 +186,16 @@ export default function Dashboard() {
                     : 0}
                   %
                 </td>
-
-                {/* Notes (truncate with full text on hover) */}
                 <td className="p-3 max-w-[16rem]">
-                  <div
-                    className="truncate"
-                    title={r.notes || ""}
-                  >
+                  <div className="truncate" title={r.notes || ""}>
                     {r.notes || "—"}
                   </div>
                 </td>
-
                 <td className="p-3 whitespace-nowrap">
-                  <button className="mr-2 underline" onClick={() => onEditClick(r)}>
+                  <button className="mr-2 underline" onClick={() => onEdit(r)}>
                     Edit
                   </button>
-                  <button className="underline" onClick={() => onDeleteClick(r.id)}>
+                  <button className="underline" onClick={() => onDelete(r.id)}>
                     Delete
                   </button>
                 </td>
@@ -125,25 +211,53 @@ export default function Dashboard() {
           </tbody>
         </table>
       </div>
-
-      {/* Editor modal */}
-      {editing && (
-        <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
-          <div className="bg-white rounded-2xl p-4 max-w-5xl w-full max-h-[90vh] overflow-auto">
-            <h2 className="text-lg font-semibold mb-3">
-              {editing.id ? "Edit session" : "New session"}
-            </h2>
-            <SessionForm initial={editing} onSubmit={onSave} onCancel={() => setEditing(null)} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-/** Build a compact per-range summary like:
- * "3pt: 12/30 (40%) • midrange: 5/10 (50%)"
- */
+/* ---------- Analytics UI ---------- */
+function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
+  return (
+    <div className="space-y-4">
+      <AnalyticsFilters value={filters} onChange={setFilters} />
+      <KpiTiles kpis={kpis} />
+
+      {/* Heatmaps side-by-side (stacked on mobile) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[380px,1fr] gap-6 items-start">
+        <div className="lg:sticky lg:top-4">
+          <HeatmapCourt data={byPos} layout="stack" />
+        </div>
+        <HeatmapCourtImage
+          data={byPos}
+          src="/court.png"
+          range={filters.range || "3pt"}
+          direction={filters.direction}
+          width={600}
+          height={567}
+        />
+      </div>
+
+      <AccuracyTrend data={trend} />
+      <AttemptsVsMadeByType data={byType} />
+    </div>
+  );
+}
+
+/* ---------- Small components & utils ---------- */
+function TabButton({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 -mb-px border-b-2 ${
+        active ? "border-black font-medium" : "border-transparent opacity-70 hover:opacity-100"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** per-range summary string for list view */
 function summarizeByRange(session) {
   const totals = {};
   (session.rounds || []).forEach((round) => {
