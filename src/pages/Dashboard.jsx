@@ -11,8 +11,8 @@ import {
 import SessionForm from "../components/SessionForm";
 
 // Analytics bits
-import HeatmapCourt from "../components/HeatmapCourt";               // blocks view
-import HeatmapCourtImage from "../components/HeatmapCourtImage";     // court.png overlay
+import HeatmapCourt from "../components/HeatmapCourt";               // blocks list (left sidebar)
+import HeatmapCourtImage from "../components/HeatmapCourtImage";     // court.png overlay (responsive)
 import AccuracyTrend from "../components/charts/AccuracyTrend";
 import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
 import AnalyticsFilters from "../components/AnalyticsFilters";
@@ -25,7 +25,7 @@ import {
   computeKpis,
 } from "../lib/analytics";
 
-// DEV: seeding helper (dev-only button)
+// DEV only helper
 import { seedSessions } from "../dev/seedSessions";
 
 export default function Dashboard() {
@@ -35,7 +35,7 @@ export default function Dashboard() {
   const [rows, setRows] = useState([]);
   const [cursor, setCursor] = useState(null);
 
-  // editor
+  // editor modal
   const [editing, setEditing] = useState(null); // null | {id?, ...data}
 
   // tabs
@@ -108,9 +108,7 @@ export default function Dashboard() {
 
   const onSave = async (data) => {
     try {
-      // always stamp ownership on the payload
-      const payload = { ...data, userId: user.uid };
-
+      const payload = { ...data, userId: user.uid }; // ownership guard
       if (editing?.id) {
         await updateSession(editing.id, payload);
       } else {
@@ -146,39 +144,35 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex flex-wrap gap-3 justify-between items-center">
-        <h1 className="text-xl">Welcome, {user?.email}</h1>
+        <h1 className="text-lg md:text-xl font-medium">
+          Welcome, {user?.email}
+        </h1>
         <div className="flex items-center gap-2">
-          {/* DEV-ONLY seed button */}
           {import.meta.env.DEV && (
             <button
-              className="border rounded-lg px-3 py-2"
+              className="border rounded-lg px-3 py-2 text-sm md:text-base"
               onClick={async () => {
-                const n = 25; // change as needed
-                try {
-                  await seedSessions(user.uid, n);
-                  await load(true);
-                  alert(`Seeded ${n} sessions for ${user.email}`);
-                } catch (e) {
-                  console.error("Seeding failed:", e);
-                  alert(e?.message || "Seeding failed");
-                }
+                const n = 25;
+                await seedSessions(user.uid, n);
+                await load(true);
+                alert(`Seeded ${n} sessions for ${user.email}`);
               }}
               title="Create random sessions for testing pagination"
             >
               Seed 25 sessions
             </button>
           )}
-          <button onClick={logout} className="border rounded-lg px-3 py-2">
+          <button onClick={logout} className="border rounded-lg px-3 py-2 text-sm md:text-base">
             Logout
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b">
+      <div className="flex gap-2 border-b overflow-x-auto">
         <TabButton active={tab === "log"} onClick={() => setTab("log")}>
           Log
         </TabButton>
@@ -213,8 +207,8 @@ export default function Dashboard() {
       {/* Editor modal */}
       {editing && (
         <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
-          <div className="bg-white rounded-2xl p-4 max-w-5xl w-full max-h-[90vh] overflow-auto">
-            <h2 className="text-lg font-semibold mb-3">
+          <div className="bg-white rounded-2xl p-4 md:p-6 max-w-5xl w-full max-h-[90vh] overflow-auto">
+            <h2 className="text-lg md:text-xl font-semibold mb-3">
               {editing.id ? "Edit session" : "New session"}
             </h2>
             <SessionForm initial={editing} onSubmit={onSave} onCancel={() => setEditing(null)} />
@@ -288,8 +282,7 @@ function LogSection({
   const end = start + pageSize;
   const paged = sorted.slice(start, end);
 
-  // 4) CSV export of filtered+sorted rows (not just current page)
-  // 4) CSV export of filtered+sorted rows (not just current page)
+  // 4) CSV export of filtered+sorted rows (not just current page) — includes "Made"
   const exportCsv = () => {
     const headers = ["Date", "Type", "Rounds", "Accuracy", "Attempts", "Made", "Notes"];
     const toRow = (s) => {
@@ -303,7 +296,7 @@ function LogSection({
         s.rounds?.length ?? 0,
         `${acc}%`,
         attempts,
-        made,              // <-- NEW COLUMN
+        made,
         `"${notes}"`,
       ].join(",");
     };
@@ -342,18 +335,18 @@ function LogSection({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 md:space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={onCreate} className="bg-black text-white rounded-xl px-4 py-2">
+        <button onClick={onCreate} className="bg-black text-white rounded-xl px-4 py-2 text-sm md:text-base">
           New session
         </button>
 
-        {/* Clear log (danger) */}
+        {/* Clear log */}
         <button
           onClick={onClearAll}
           disabled={!rows.length || clearing}
-          className={`rounded-xl px-3 py-2 border ${
+          className={`rounded-xl px-3 py-2 border text-sm md:text-base ${
             clearing ? "opacity-60 cursor-not-allowed" : "hover:bg-red-50"
           } text-red-600`}
           title="Delete ALL sessions for your account"
@@ -368,7 +361,7 @@ function LogSection({
             setTypeFilter(e.target.value);
             setPage(0);
           }}
-          className="border rounded-lg p-2"
+          className="border rounded-lg p-2 text-sm md:text-base"
           title="Filter by training type"
         >
           <option value="all">All types</option>
@@ -386,7 +379,7 @@ function LogSection({
             setFrom(e.target.value);
             setPage(0);
           }}
-          className="border rounded-lg p-2"
+          className="border rounded-lg p-2 text-sm md:text-base"
           title="From"
         />
         <input
@@ -396,7 +389,7 @@ function LogSection({
             setTo(e.target.value);
             setPage(0);
           }}
-          className="border rounded-lg p-2"
+          className="border rounded-lg p-2 text-sm md:text-base"
           title="To"
         />
 
@@ -405,7 +398,7 @@ function LogSection({
           <button
             onClick={exportCsv}
             disabled={!sorted.length}
-            className="border rounded-lg px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-40"
+            className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 disabled:opacity-40"
             title="Export filtered rows as CSV"
           >
             Export CSV
@@ -418,7 +411,7 @@ function LogSection({
               setPageSize(Number(e.target.value));
               setPage(0);
             }}
-            className="border rounded-lg p-2"
+            className="border rounded-lg p-2 text-sm md:text-base"
           >
             {[10, 20, 50].map((n) => (
               <option key={n} value={n}>
@@ -428,7 +421,7 @@ function LogSection({
           </select>
 
           {cursor && (
-            <button onClick={onLoadMore} className="border rounded-xl px-3 py-2">
+            <button onClick={onLoadMore} className="border rounded-xl px-3 py-2 text-sm md:text-base">
               Load more
             </button>
           )}
@@ -437,7 +430,7 @@ function LogSection({
 
       {/* Table */}
       <div className="overflow-x-auto border rounded-2xl">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm md:text-[15px]">
           <thead className="bg-gray-50">
             <tr>
               <Th k="date">Date</Th>
@@ -517,24 +510,27 @@ function LogSection({
 /* ---------- Analytics UI ---------- */
 function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 md:space-y-6">
       <AnalyticsFilters value={filters} onChange={setFilters} />
       <KpiTiles kpis={kpis} windowDays={filters.windowDays || 7} />
 
-      {/* Heatmaps side-by-side (stacked on mobile) */}
-      <div className="grid grid-cols-1 lg:grid-cols-[380px,1fr] gap-6 items-start">
+      {/* Heatmaps side-by-side on large screens; stacked on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,380px),1fr] gap-4 md:gap-6 items-start">
         <div className="lg:sticky lg:top-4">
           <HeatmapCourt data={byPos} layout="stack" />
         </div>
-        <HeatmapCourtImage
-          data={byPos}
-          src="/court.png"
-          range={filters.range || "3pt"}
-          direction={filters.direction}
-          width={600}
-          height={567}
-          flip={true} // offense view
-        />
+        <div className="w-full">
+          <HeatmapCourtImage
+            data={byPos}
+            src="/court.png"
+            range={filters.range || "3pt"}
+            direction={filters.direction}
+            width={600}
+            height={567}
+            flip={true} // offense view
+            className="w-full max-w-[620px] mx-auto"
+          />
+        </div>
       </div>
 
       <AccuracyTrend data={trend} />
