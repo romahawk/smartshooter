@@ -69,12 +69,14 @@ export function aggregateByPosition(sessions, opts) {
   return map;
 }
 
-/** Daily accuracy (for line chart) */
+/** Daily accuracy (for line chart) — excludes dates with zero attempts for current filters */
 export function aggregateAccuracyByDate(sessions, opts) {
   const daily = new Map(); // date -> { made, attempts }
+
   for (const s of sessions || []) {
-    let made = 0,
-      attempts = 0;
+    let made = 0;
+    let attempts = 0;
+
     for (const r of s.rounds || []) {
       for (const z of r.zones || []) {
         if (!passRoundZoneFilters(r, z, opts)) continue;
@@ -82,11 +84,16 @@ export function aggregateAccuracyByDate(sessions, opts) {
         attempts += num(z.attempts);
       }
     }
-    if (!daily.has(s.date)) daily.set(s.date, { made: 0, attempts: 0 });
-    const t = daily.get(s.date);
-    t.made += made;
-    t.attempts += attempts;
+
+    // Only record this date if attempts > 0 for the active filters
+    if (attempts > 0) {
+      const prev = daily.get(s.date) || { made: 0, attempts: 0 };
+      prev.made += made;
+      prev.attempts += attempts;
+      daily.set(s.date, prev);
+    }
   }
+
   return Array.from(daily.entries())
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
     .map(([date, t]) => ({
