@@ -11,34 +11,31 @@ const LABEL = {
 };
 
 /** -------- Heat box coordinates (normalized 0..1) --------
- * These are tuned for a 600x567 half-court image, but since we
- * multiply by width/height they scale cleanly.
- * You can tweak x,y,w,h if you want to fine-tune positions.
+ * Tuned for a 600x567 half-court; since we output percentages,
+ * it scales responsively with the container.
+ * x, y are TOP-LEFT (not center). w, h are size.
  */
 const ZONES_FOR_RANGE = {
   "3pt": [
-    // corners: skinny vertical boxes hugging baselines
     { key: "left_corner",  x: 0.005, y: 0.77, w: 0.05, h: 0.22 },
     { key: "right_corner", x: 0.945, y: 0.77, w: 0.05, h: 0.22 },
-    // wings & center above the arc
-    { key: "left_wing",  x: 0.10, y: 0.4, w: 0.13, h: 0.10 },
-    { key: "center",     x: 0.435, y: 0.26, w: 0.13, h: 0.12 },
-    { key: "right_wing", x: 0.775, y: 0.4, w: 0.13, h: 0.10 },
+    { key: "left_wing",    x: 0.10,  y: 0.40, w: 0.13, h: 0.10 },
+    { key: "center",       x: 0.435, y: 0.26, w: 0.13, h: 0.12 },
+    { key: "right_wing",   x: 0.775, y: 0.40, w: 0.13, h: 0.10 },
   ],
   midrange: [
     { key: "left_corner",  x: 0.12, y: 0.85, w: 0.13, h: 0.12 },
-    { key: "left_wing",    x: 0.19, y: 0.6, w: 0.13, h: 0.12 },
+    { key: "left_wing",    x: 0.19, y: 0.60, w: 0.13, h: 0.12 },
     { key: "center",       x: 0.43, y: 0.45, w: 0.14, h: 0.13 },
-    { key: "right_wing",   x: 0.68, y: 0.6, w: 0.13, h: 0.12 },
+    { key: "right_wing",   x: 0.68, y: 0.60, w: 0.13, h: 0.12 },
     { key: "right_corner", x: 0.75, y: 0.85, w: 0.13, h: 0.12 },
   ],
   paint: [
     { key: "left_corner",  x: 0.34, y: 0.85, w: 0.10, h: 0.10 },
-    { key: "center",       x: 0.45, y: 0.6, w: 0.10, h: 0.10 },
+    { key: "center",       x: 0.45, y: 0.60, w: 0.10, h: 0.10 },
     { key: "right_corner", x: 0.56, y: 0.85, w: 0.10, h: 0.10 },
-    // lightly place wings to suggest short-mid paint kickouts
     { key: "left_wing",    x: 0.35, y: 0.70, w: 0.10, h: 0.10 },
-    { key: "right_wing",   x: 0.55, y: 0.7, w: 0.10, h: 0.10 },
+    { key: "right_wing",   x: 0.55, y: 0.70, w: 0.10, h: 0.10 },
   ],
 };
 
@@ -62,46 +59,41 @@ function colorForAcc(acc = 0) {
 }
 
 /**
- * HeatmapCourtImage
- * @param {{
- *   data: Record<string,{made:number,attempts:number,acc:number}>,
- *   src?: string,
- *   range?: "3pt"|"midrange"|"paint",
- *   direction?: string,           // not used for placement, present for future
- *   width?: number,
- *   height?: number,
- *   title?: string,
- *   titleAlign?: "left"|"center"|"right",
- *   flip?: boolean,               // vertical flip (offense view)
- * }} props
+ * Responsive court image + overlay heat boxes.
+ * width/height act as MAX dimensions; component scales to parent width.
  */
 export default function HeatmapCourtImage({
   data = {},
   src = "/court.png",
   range = "3pt",
-  direction,           // reserved for future use (e.g., LR/RL mirroring)
+  direction,                    // reserved
   width = 600,
   height = 567,
   title = "Court Heatmap",
   titleAlign = "center",
-  flip = true,         // set to true to show offense (vertical flip)
+  flip = true,                  // offense view
+  className = "",
 }) {
   const boxes = ZONES_FOR_RANGE[range] || ZONES_FOR_RANGE["3pt"];
 
-  return (
-    <div className="w-full">
-      <div className={`text-sm font-semibold mb-2 text-${titleAlign}`}>{title}</div>
+  // Tailwind-safe title alignment mapping
+  const titleAlignClass =
+    titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
 
-      {/* Flip the entire court vertically; counter-flip each box content */}
+  return (
+    <div className={`w-full ${className}`}>
+      <div className={`text-sm font-semibold mb-2 ${titleAlignClass}`}>{title}</div>
+
+      {/* Outer wrapper: responsive. aspectRatio preserves shape; maxWidth caps growth */}
       <div
-        className="relative mx-auto"
+        className={`relative mx-auto ${flip ? "scale-y-[-1]" : ""}`}
         style={{
-          width,
-          height,
-          transform: flip ? "scaleY(-1)" : "none",
+          maxWidth: width,
+          aspectRatio: `${width}/${height}`,
           transformOrigin: "center",
         }}
       >
+        {/* Court image */}
         <img
           src={src}
           alt="court"
@@ -109,32 +101,34 @@ export default function HeatmapCourtImage({
           draggable={false}
         />
 
+        {/* Overlays (percent-based) */}
         {boxes.map((z) => {
           const stat = data[z.key] || { acc: 0, made: 0, attempts: 0 };
           const bg = colorForAcc(stat.acc);
-
-          // position & size in pixels
-          const style = {
-            left: z.x * width,
-            top: z.y * height,
-            width: z.w * width,
-            height: z.h * height,
-            background: bg,
-            transform: flip ? "scaleY(-1)" : "none", // keep text upright
-            transformOrigin: "center",
-          };
-
           return (
             <div
               key={z.key}
-              className="absolute rounded-xl border flex items-center justify-center p-1"
-              style={style}
+              className={`absolute rounded-xl border flex items-center justify-center p-1 ${flip ? "scale-y-[-1]" : ""}`}
+              style={{
+                left: `${z.x * 100}%`,
+                top: `${z.y * 100}%`,
+                width: `${z.w * 100}%`,
+                height: `${z.h * 100}%`,
+                background: bg,
+              }}
               title={`${LABEL[z.key]} — ${stat.made}/${stat.attempts} (${stat.acc}%)`}
             >
-              <div className="text-[10px] text-black/90 text-center leading-tight">
-                <div className="font-medium">{LABEL[z.key]}</div>
-                <div className="opacity-80">
-                  {stat.made}/{stat.attempts} ({stat.acc}%)
+              {/* Desktop/tablet: full label + numbers; Mobile: only % */}
+              <div className="text-[11px] md:text-xs text-black/90 text-center leading-tight">
+                {/* Mobile-only percentage */}
+                <div className="font-semibold md:hidden">{stat.acc}%</div>
+
+                {/* Desktop/Tablet content */}
+                <div className="hidden md:block">
+                  <div className="font-medium">{LABEL[z.key]}</div>
+                  <div className="opacity-80">
+                    {stat.made}/{stat.attempts} ({stat.acc}%)
+                  </div>
                 </div>
               </div>
             </div>
@@ -142,7 +136,7 @@ export default function HeatmapCourtImage({
         })}
       </div>
 
-      {/* Legend (not flipped) */}
+      {/* Legend */}
       <div className="flex items-center gap-2 mt-2 text-xs">
         <span>Low</span>
         <div className="h-2 flex-1 rounded bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0]" />
