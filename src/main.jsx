@@ -4,6 +4,10 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import "./index.css";
 import { Toaster } from "sonner";
+import { initTheme } from "./lib/theme"; // ⬅️ initialize theme class on <html>
+
+// Apply stored/system theme BEFORE the app mounts
+initTheme();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -12,11 +16,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       {/* Global toast host */}
       <Toaster
         richColors
-        theme="light"
+        theme="system"          // ⬅️ follows light/dark (including your toggle)
         position="top-right"
-        toastOptions={{
-          duration: 2200,
-        }}
+        toastOptions={{ duration: 2200 }}
       />
     </BrowserRouter>
   </React.StrictMode>

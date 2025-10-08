@@ -66,7 +66,7 @@ export default function HeatmapCourtImage({
   data = {},
   src = "/court.png",
   range = "3pt",
-  direction,                    // reserved
+  direction,                    // reserved for future use
   width = 600,
   height = 567,
   title = "Court Heatmap",
@@ -81,8 +81,8 @@ export default function HeatmapCourtImage({
     titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
 
   return (
-    <div className={`w-full ${className}`}>
-      <div className={`text-sm font-semibold mb-2 ${titleAlignClass}`}>{title}</div>
+    <div className={`w-full border rounded-2xl p-4 bg-white dark:bg-neutral-800 dark:border-neutral-700 ${className}`}>
+      <div className={`text-sm font-medium mb-3 opacity-80 ${titleAlignClass}`}>{title}</div>
 
       {/* Outer wrapper: responsive. aspectRatio preserves shape; maxWidth caps growth */}
       <div
@@ -93,11 +93,13 @@ export default function HeatmapCourtImage({
           transformOrigin: "center",
         }}
       >
-        {/* Court image */}
+        {/* Court image (light lines in dark via invert/contrast) */}
         <img
           src={src}
-          alt="court"
-          className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+          alt="Court"
+          width={width}
+          height={height}
+          className="w-full h-auto select-none rounded-xl dark:invert dark:contrast-125"
           draggable={false}
         />
 
@@ -119,7 +121,7 @@ export default function HeatmapCourtImage({
               title={`${LABEL[z.key]} — ${stat.made}/${stat.attempts} (${stat.acc}%)`}
             >
               {/* Desktop/tablet: full label + numbers; Mobile: only % */}
-              <div className="text-[11px] md:text-xs text-black/90 text-center leading-tight">
+              <div className="text-[11px] md:text-xs text-black text-center leading-tight">
                 {/* Mobile-only percentage */}
                 <div className="font-semibold md:hidden">{stat.acc}%</div>
 
@@ -136,11 +138,11 @@ export default function HeatmapCourtImage({
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-2 mt-2 text-xs">
-        <span>Low</span>
-        <div className="h-2 flex-1 rounded bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0]" />
-        <span>High</span>
+      {/* Legend (dark-mode tuned) */}
+      <div className="flex items-center gap-2 mt-3 text-xs">
+        <span className="opacity-70">Low</span>
+        <div className="h-2 flex-1 rounded-full bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0] dark:from-rose-200 dark:via-yellow-300 dark:to-green-300" />
+        <span className="opacity-70">High</span>
       </div>
     </div>
   );

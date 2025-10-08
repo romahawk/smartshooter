@@ -24,8 +24,8 @@ export default function HeatmapCourt({ data = {}, layout = "row" }) {
       : "grid grid-cols-1 md:grid-cols-5 gap-2";
 
   return (
-    <div className="w-full">
-      <div className="text-sm font-semibold mb-2">Zones Heatmap</div>
+    <div className="w-full border rounded-2xl p-4 bg-white dark:bg-neutral-800 dark:border-neutral-700">
+      <div className="text-sm font-medium mb-3 opacity-80">Zones Heatmap</div>
 
       <div className={gridClass}>
         {POS.map((p) => {
@@ -34,12 +34,13 @@ export default function HeatmapCourt({ data = {}, layout = "row" }) {
           return (
             <div
               key={p}
-              className="rounded-xl p-3 text-left border"
+              className="rounded-xl p-3 text-left border border-transparent dark:border-neutral-700"
               style={{ background: bg }}
               title={`${LABEL[p]} — ${v.made}/${v.attempts} (${v.acc}%)`}
             >
-              <div className="text-xs font-medium">{LABEL[p]}</div>
-              <div className="text-xs opacity-80">
+              {/* Force black text for best contrast on the pastel/yellow chips (matches court labels) */}
+              <div className="text-xs font-medium text-black">{LABEL[p]}</div>
+              <div className="text-xs text-black opacity-80">
                 {v.made}/{v.attempts} ({v.acc}%)
               </div>
             </div>
@@ -47,10 +48,10 @@ export default function HeatmapCourt({ data = {}, layout = "row" }) {
         })}
       </div>
 
-      <div className="flex items-center gap-2 mt-2 text-xs">
-        <span>Low</span>
-        <div className="h-2 flex-1 rounded bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0]" />
-        <span>High</span>
+      <div className="flex items-center gap-2 mt-3 text-xs">
+        <span className="opacity-70">Low</span>
+        <div className="h-2 flex-1 rounded-full bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0] dark:from-rose-200 dark:via-yellow-300 dark:to-green-300" />
+        <span className="opacity-70">High</span>
       </div>
     </div>
   );

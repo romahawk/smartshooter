@@ -31,6 +31,7 @@ import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
 import { toast } from "sonner";
 import Spinner from "../components/ui/Spinner";
 import { Skeleton } from "../components/ui/Skeleton";
+import ThemeToggle from "../components/ThemeToggle";
 
 // Dev helpers
 import { seedSessions } from "../dev/seedSessions";
@@ -175,7 +176,7 @@ export default function Dashboard() {
   const filtered = useMemo(
     () =>
       filterSessions(rows, {
-        // ✅ use correct keys for the helper
+        // ✅ pass correct keys that analytics.js expects
         from: filters.dateFrom,
         to: filters.dateTo,
         types: filters.types,
@@ -210,7 +211,7 @@ export default function Dashboard() {
   const showSkelBar = isLoading && !hasAny;
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 bg-white text-black dark:bg-neutral-900 dark:text-neutral-100 min-h-screen">
       {/* Header */}
       <div className="flex flex-wrap gap-3 justify-between items-center">
         <h1 className="text-lg md:text-xl font-medium">
@@ -243,8 +244,8 @@ export default function Dashboard() {
                     setSlowEnabled(true);
                   }
                 }}
-                className={`rounded-lg px-3 py-2 text-sm border inline-flex items-center gap-2 ${
-                  slowEnabled ? "bg-yellow-50 border-yellow-300 text-yellow-800" : "hover:bg-gray-50"
+                className={`rounded-lg px-3 py-2 text-sm border inline-flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700 ${
+                  slowEnabled ? "bg-yellow-50 border-yellow-300 text-yellow-800 dark:text-yellow-300" : ""
                 }`}
                 title="Toggle ?slow to simulate delays (dev only)"
               >
@@ -257,7 +258,7 @@ export default function Dashboard() {
 
               {/* Seed */}
               <button
-                className="border rounded-lg px-3 py-2 text-sm"
+                className="border rounded-lg px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
                 title="Create random sessions for testing"
                 onClick={async () => {
                   try {
@@ -275,14 +276,21 @@ export default function Dashboard() {
               </button>
             </>
           )}
-          <button onClick={logout} className="border rounded-lg px-3 py-2">
+
+          {/* Theme toggle */}
+          <ThemeToggle />
+
+          <button
+            onClick={logout}
+            className="border rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
+          >
             Logout
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b overflow-x-auto">
+      <div className="flex gap-2 border-b overflow-x-auto dark:border-neutral-800">
         <TabButton active={tab === "log"} onClick={() => setTab("log")}>
           Log
         </TabButton>
@@ -319,7 +327,7 @@ export default function Dashboard() {
       {/* Editor modal */}
       {editing && (
         <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
-          <div className="bg-white rounded-2xl p-4 md:p-6 max-w-5xl w-full max-h-[90vh] overflow-auto">
+          <div className="bg-white dark:bg-neutral-900 dark:text-neutral-100 dark:border-neutral-700 border rounded-2xl p-4 md:p-6 max-w-5xl w-full max-h-[90vh] overflow-auto">
             <h2 className="text-lg md:text-xl font-semibold mb-3">
               {editing.id ? "Edit session" : "New session"}
             </h2>
@@ -482,8 +490,8 @@ function LogSection({
           onClick={onClearAll}
           disabled={!rows.length || clearing}
           className={`rounded-xl px-3 py-2 border text-sm md:text-base ${
-            clearing ? "opacity-60 cursor-not-allowed" : "hover:bg-red-50"
-          } text-red-600`}
+            clearing ? "opacity-60 cursor-not-allowed" : "hover:bg-red-50 dark:hover:bg-red-900/20"
+          } text-red-600 dark:text-red-400 dark:border-neutral-700`}
           title="Delete ALL sessions"
         >
           {clearing ? "Clearing…" : "Clear log"}
@@ -495,7 +503,7 @@ function LogSection({
             setTypeFilter(e.target.value);
             setPage(0);
           }}
-          className="border rounded-lg p-2 text-sm md:text-base"
+          className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
           title="Filter by training type"
         >
           <option value="all">All types</option>
@@ -512,7 +520,7 @@ function LogSection({
             setFrom(e.target.value);
             setPage(0);
           }}
-          className="border rounded-lg p-2 text-sm md:text-base"
+          className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
         />
         <input
           type="date"
@@ -521,14 +529,14 @@ function LogSection({
             setTo(e.target.value);
             setPage(0);
           }}
-          className="border rounded-lg p-2 text-sm md:text-base"
+          className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
         />
 
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={exportCsv}
             disabled={!sorted.length || exporting}
-            className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 disabled:opacity-40 inline-flex items-center gap-2"
+            className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-40 inline-flex items-center gap-2 dark:border-neutral-700"
             title="Export filtered rows"
           >
             {exporting && <Spinner size={14} />}
@@ -542,7 +550,7 @@ function LogSection({
               setPageSize(Number(e.target.value));
               setPage(0);
             }}
-            className="border rounded-lg p-2 text-sm md:text-base"
+            className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
           >
             {[10, 20, 50].map((n) => (
               <option key={n} value={n}>
@@ -554,10 +562,10 @@ function LogSection({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto border rounded-2xl">
+      <div className="overflow-x-auto border rounded-2xl bg-white dark:bg-neutral-800 dark:border-neutral-700">
         <table className="w-full text-sm md:text-[15px]">
-          <thead className="bg-gray-50">
-            <tr>
+          <thead className="bg-gray-50 dark:bg-neutral-800/60">
+            <tr className="dark:text-neutral-200">
               <Th k="date">Date</Th>
               <Th k="type">Type</Th>
               <th className="text-left p-3">Zones</th>
@@ -570,7 +578,7 @@ function LogSection({
           <tbody>
             {isLoading
               ? Array.from({ length: 6 }).map((_, i) => (
-                  <tr key={`sk-${i}`} className="border-t">
+                  <tr key={`sk-${i}`} className="border-t dark:border-neutral-700">
                     <td className="p-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="p-3"><Skeleton className="h-4 w-28" /></td>
                     <td className="p-3"><Skeleton className="h-4 w-64" /></td>
@@ -585,7 +593,7 @@ function LogSection({
                   const made = Number(r.totals?.made || 0);
                   const acc = att ? Math.round((made / att) * 100) : 0;
                   return (
-                    <tr key={r.id} className="border-t align-top">
+                    <tr key={r.id} className="border-t align-top dark:border-neutral-700">
                       <td className="p-3 whitespace-nowrap">{r.date}</td>
                       <td className="p-3 whitespace-nowrap">{r.type}</td>
                       <td className="p-3">{summarizeByRange(r) || "—"}</td>
@@ -623,7 +631,7 @@ function LogSection({
         <button
           disabled={safePage === 0}
           onClick={() => setPage((p) => Math.max(0, p - 1))}
-          className="border rounded px-2 py-1 disabled:opacity-40"
+          className="border rounded px-2 py-1 disabled:opacity-40 dark:border-neutral-700"
         >
           Prev
         </button>
@@ -634,7 +642,7 @@ function LogSection({
         <button
           disabled={safePage >= pages - 1}
           onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
-          className="border rounded px-2 py-1 disabled:opacity-40"
+          className="border rounded px-2 py-1 disabled:opacity-40 dark:border-neutral-700"
         >
           Next
         </button>
@@ -664,15 +672,15 @@ function AnalyticsSection({
         <AnalyticsFilters value={filters} onChange={setFilters} />
         {showSkelKPIs ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <div className="border rounded-2xl p-4">
+            <div className="border rounded-2xl p-4 dark:bg-neutral-800 dark:border-neutral-700">
               <Skeleton className="h-3 w-28 mb-2" />
               <Skeleton className="h-7 w-20" />
             </div>
-            <div className="border rounded-2xl p-4">
+            <div className="border rounded-2xl p-4 dark:bg-neutral-800 dark:border-neutral-700">
               <Skeleton className="h-3 w-28 mb-2" />
               <Skeleton className="h-7 w-20" />
             </div>
-            <div className="border rounded-2xl p-4">
+            <div className="border rounded-2xl p-4 dark:bg-neutral-800 dark:border-neutral-700">
               <Skeleton className="h-3 w-28 mb-2" />
               <Skeleton className="h-5 w-56" />
             </div>
@@ -688,7 +696,7 @@ function AnalyticsSection({
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,380px),1fr] gap-4 md:gap-6 items-start">
         <div className="lg:sticky lg:top-4">
           {showSkelHeat ? (
-            <div className="border rounded-2xl p-4">
+            <div className="border rounded-2xl p-4 dark:bg-neutral-800 dark:border-neutral-700">
               <Skeleton className="h-4 w-40 mb-3" />
               <div className="space-y-2">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -703,7 +711,7 @@ function AnalyticsSection({
 
         <div className="w-full">
           {showSkelHeat ? (
-            <div className="border rounded-2xl p-3" style={{ aspectRatio: "600 / 567" }}>
+            <div className="border rounded-2xl p-3 dark:bg-neutral-800 dark:border-neutral-700" style={{ aspectRatio: "600 / 567" }}>
               <Skeleton className="w-full h-full rounded-xl" />
             </div>
           ) : (
@@ -749,7 +757,9 @@ function TabButton({ active, onClick, children }) {
     <button
       onClick={onClick}
       className={`px-4 py-2 -mb-px border-b-2 ${
-        active ? "border-black font-medium" : "border-transparent opacity-70 hover:opacity-100"
+        active
+          ? "border-black font-medium dark:border-white"
+          : "border-transparent opacity-70 hover:opacity-100"
       }`}
     >
       {children}
