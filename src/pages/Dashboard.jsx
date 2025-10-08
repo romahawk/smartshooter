@@ -1,4 +1,3 @@
-// src/pages/Dashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { newSession } from "../lib/models";
@@ -11,8 +10,8 @@ import {
 import SessionForm from "../components/SessionForm";
 
 // Analytics bits
-import HeatmapCourt from "../components/HeatmapCourt";               // blocks list (left sidebar)
-import HeatmapCourtImage from "../components/HeatmapCourtImage";     // court.png overlay (responsive)
+import HeatmapCourt from "../components/HeatmapCourt";
+import HeatmapCourtImage from "../components/HeatmapCourtImage";
 import AccuracyTrend from "../components/charts/AccuracyTrend";
 import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
 import AnalyticsFilters from "../components/AnalyticsFilters";
@@ -27,6 +26,9 @@ import {
 
 // DEV only helper
 import { seedSessions } from "../dev/seedSessions";
+
+// ✅ Toasts
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore();
@@ -67,10 +69,11 @@ export default function Dashboard() {
     if (!ok) return;
     try {
       await deleteSession(id);
+      toast.success("Session deleted");
       await load(true);
     } catch (err) {
       console.error("[Dashboard] delete failed:", err);
-      alert(err?.message || "Failed to delete session");
+      toast.error(err?.message || "Failed to delete session");
     }
   };
 
@@ -80,16 +83,17 @@ export default function Dashboard() {
       "Clear ALL sessions in your log? This cannot be undone."
     );
     if (!confirm1) return;
-
     const phrase = prompt('Type "CLEAR" to confirm deleting ALL sessions:');
     if (phrase !== "CLEAR") return;
 
     setClearing(true);
     try {
       let nextCursor = null;
+      let total = 0;
       do {
         const { docs, cursor: cur } = await listSessions(user.uid, 50, nextCursor);
         const ids = docs.map((d) => d.id);
+        total += ids.length;
         if (ids.length) {
           await Promise.all(ids.map((id) => deleteSession(id)));
         }
@@ -97,10 +101,10 @@ export default function Dashboard() {
       } while (nextCursor);
 
       await load(true);
-      alert("All sessions have been deleted.");
+      toast.success(`Cleared ${total} session${total === 1 ? "" : "s"}`);
     } catch (err) {
       console.error("[Dashboard] clear log failed:", err);
-      alert(err?.message || "Failed to clear log");
+      toast.error(err?.message || "Failed to clear log");
     } finally {
       setClearing(false);
     }
@@ -111,14 +115,16 @@ export default function Dashboard() {
       const payload = { ...data, userId: user.uid }; // ownership guard
       if (editing?.id) {
         await updateSession(editing.id, payload);
+        toast.success("Session updated");
       } else {
         await createSession(payload);
+        toast.success("Session created");
       }
       setEditing(null);
       await load(true);
     } catch (err) {
       console.error("[Dashboard] save failed:", err);
-      alert(err?.message || "Failed to save session");
+      toast.error(err?.message || "Failed to save session");
     }
   };
 
@@ -155,10 +161,15 @@ export default function Dashboard() {
             <button
               className="border rounded-lg px-3 py-2 text-sm md:text-base"
               onClick={async () => {
-                const n = 25;
-                await seedSessions(user.uid, n);
-                await load(true);
-                alert(`Seeded ${n} sessions for ${user.email}`);
+                try {
+                  const n = 25;
+                  await seedSessions(user.uid, n);
+                  await load(true);
+                  toast.success(`Seeded ${n} sessions`);
+                } catch (e) {
+                  console.error("Seeding failed:", e);
+                  toast.error(e?.message || "Seeding failed");
+                }
               }}
               title="Create random sessions for testing pagination"
             >
@@ -230,7 +241,6 @@ function LogSection({
   onDelete,
   onClearAll,
 }) {
-  // Controls
   const [typeFilter, setTypeFilter] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -282,7 +292,7 @@ function LogSection({
   const end = start + pageSize;
   const paged = sorted.slice(start, end);
 
-  // 4) CSV export of filtered+sorted rows (not just current page) — includes "Made"
+  // 4) CSV export (filtered+sorted rows)
   const exportCsv = () => {
     const headers = ["Date", "Type", "Rounds", "Accuracy", "Attempts", "Made", "Notes"];
     const toRow = (s) => {
@@ -300,17 +310,22 @@ function LogSection({
         `"${notes}"`,
       ].join(",");
     };
-    const csv = [headers.join(","), ...sorted.map(toRow)].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `training_log_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const csv = [headers.join(","), ...sorted.map(toRow)].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `training_log_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${sorted.length} row${sorted.length === 1 ? "" : "s"}`);
+    } catch (e) {
+      console.error("CSV export failed", e);
+      toast.error("Export failed");
+    }
   };
 
-  // Sortable header cell
   const Th = ({ k, children }) => (
     <th
       className={`text-left p-3 select-none ${
@@ -507,7 +522,6 @@ function LogSection({
   );
 }
 
-/* ---------- Analytics UI ---------- */
 function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
   return (
     <div className="space-y-4 md:space-y-6">
@@ -539,7 +553,6 @@ function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
   );
 }
 
-/* ---------- Small components & utils ---------- */
 function TabButton({ active, onClick, children }) {
   return (
     <button
@@ -553,7 +566,6 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-/** per-range summary string for list view */
 function summarizeByRange(session) {
   const totals = {};
   (session.rounds || []).forEach((round) => {
