@@ -1,5 +1,5 @@
 // src/components/HeatmapCourtImage.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 /** -------- Display labels by key -------- */
 const LABEL = {
@@ -10,11 +10,7 @@ const LABEL = {
   right_corner: "Right Corner",
 };
 
-/** -------- Heat box coordinates (normalized 0..1) --------
- * Tuned for a 600x567 half-court; since we output percentages,
- * it scales responsively with the container.
- * x, y are TOP-LEFT (not center). w, h are size.
- */
+/** -------- Heat box coordinates (normalized 0..1) -------- */
 const ZONES_FOR_RANGE = {
   "3pt": [
     { key: "left_corner",  x: 0.005, y: 0.77, w: 0.05, h: 0.22 },
@@ -58,42 +54,103 @@ function colorForAcc(acc = 0) {
   return `rgb(${r},${g},${b})`;
 }
 
+const isCorner = (k) => k === "left_corner" || k === "right_corner";
+
+/** --- responsive hook: sm breakpoint (Tailwind ~640px) --- */
+function useIsSmall() {
+  const [isSmall, setIsSmall] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setIsSmall(mq.matches);
+    onChange();
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+  return isSmall;
+}
+
+/** Compute outside label placement + connector line for each zone */
+function getPlacement(z, isSmall) {
+  // Default gaps
+  const sideGap = isSmall ? 8 : 16; // tighter on mobile
+  const lineLenH = isSmall ? 8 : 12;
+  const bottomGap = isSmall ? 8 : 12;
+  const lineLenV = isSmall ? 8 : 10;
+
+  // Corners:
+  // - Desktop: label OUTSIDE (left_corner→left side, right_corner→right side)
+  // - Mobile:  label INSIDE the court (left_corner→to RIGHT of zone, right_corner→to LEFT)
+  if (isCorner(z.key)) {
+    if (z.key === "left_corner") {
+      // desktop: outside-left ; mobile: inside-right
+      return isSmall
+        ? {
+            pillStyle: { left: `calc(100% + ${sideGap}px)`, top: "50%", transform: "translateY(-50%)" },
+            lineStyle: { left: "100%", width: `${lineLenH}px`, top: "50%", transform: "translateY(-50%)" },
+            lineDir: "h",
+          }
+        : {
+            pillStyle: { right: `calc(100% + ${sideGap}px)`, top: "50%", transform: "translateY(-50%)" },
+            lineStyle: { right: `-${lineLenH}px`, width: `${lineLenH}px`, top: "50%", transform: "translateY(-50%)" },
+            lineDir: "h",
+          };
+    } else {
+      // right_corner
+      return isSmall
+        ? {
+            pillStyle: { right: `calc(100% + ${sideGap}px)`, top: "50%", transform: "translateY(-50%)" },
+            lineStyle: { right: "100%", width: `${lineLenH}px`, top: "50%", transform: "translateY(-50%)" },
+            lineDir: "h",
+          }
+        : {
+            pillStyle: { left: `calc(100% + ${sideGap}px)`, top: "50%", transform: "translateY(-50%)" },
+            lineStyle: { left: `-${lineLenH}px`, width: `${lineLenH}px`, top: "50%", transform: "translateY(-50%)" },
+            lineDir: "h",
+          };
+    }
+  }
+
+  // Wings & Center: labels below with vertical connector (both mobile & desktop)
+  return {
+    pillStyle: { left: "50%", top: `calc(100% + ${bottomGap + lineLenV}px)`, transform: "translateX(-50%)" },
+    lineStyle: { left: "50%", transform: "translateX(-50%)", bottom: `-${lineLenV}px`, height: `${lineLenV}px`, width: "2px" },
+    lineDir: "v",
+  };
+}
+
 /**
  * Responsive court image + overlay heat boxes.
- * width/height act as MAX dimensions; component scales to parent width.
  */
 export default function HeatmapCourtImage({
   data = {},
   src = "/court.png",
   range = "3pt",
-  direction,                    // reserved for future use
   width = 600,
   height = 567,
   title = "Court Heatmap",
   titleAlign = "center",
-  flip = true,                  // offense view
+  flip = true,
   className = "",
 }) {
+  const isSmall = useIsSmall();
   const boxes = ZONES_FOR_RANGE[range] || ZONES_FOR_RANGE["3pt"];
-
-  // Tailwind-safe title alignment mapping
   const titleAlignClass =
     titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
 
   return (
-    <div className={`w-full border rounded-2xl p-4 bg-white dark:bg-neutral-800 dark:border-neutral-700 ${className}`}>
+    <div className={`w-full border rounded-2xl p-4 bg-white dark:bg-neutral-900 dark:border-neutral-700 ${className}`}>
       <div className={`text-sm font-medium mb-3 opacity-80 ${titleAlignClass}`}>{title}</div>
 
-      {/* Outer wrapper: responsive. aspectRatio preserves shape; maxWidth caps growth */}
       <div
         className={`relative mx-auto ${flip ? "scale-y-[-1]" : ""}`}
         style={{
           maxWidth: width,
           aspectRatio: `${width}/${height}`,
           transformOrigin: "center",
+          overflow: "visible",
         }}
       >
-        {/* Court image (light lines in dark via invert/contrast) */}
         <img
           src={src}
           alt="Court"
@@ -103,42 +160,75 @@ export default function HeatmapCourtImage({
           draggable={false}
         />
 
-        {/* Overlays (percent-based) */}
         {boxes.map((z) => {
           const stat = data[z.key] || { acc: 0, made: 0, attempts: 0 };
           const bg = colorForAcc(stat.acc);
+          const placement = getPlacement(z, isSmall);
+
           return (
             <div
               key={z.key}
-              className={`absolute rounded-xl border flex items-center justify-center p-1 ${flip ? "scale-y-[-1]" : ""}`}
+              className={`absolute ${flip ? "scale-y-[-1]" : ""}`}
               style={{
                 left: `${z.x * 100}%`,
                 top: `${z.y * 100}%`,
                 width: `${z.w * 100}%`,
                 height: `${z.h * 100}%`,
                 background: bg,
+                borderRadius: "0.75rem",
+                border: "1px solid rgba(0,0,0,0.1)",
               }}
               title={`${LABEL[z.key]} — ${stat.made}/${stat.attempts} (${stat.acc}%)`}
             >
-              {/* Desktop/tablet: full label + numbers; Mobile: only % */}
-              <div className="text-[11px] md:text-xs text-black text-center leading-tight">
-                {/* Mobile-only percentage */}
-                <div className="font-semibold md:hidden">{stat.acc}%</div>
+              {/* CONNECTOR */}
+              {placement.lineDir === "h" ? (
+                <div
+                  className="absolute h-[2px] bg-slate-400 dark:bg-slate-400"
+                  style={placement.lineStyle}
+                />
+              ) : (
+                <div
+                  className="absolute w-[2px] bg-slate-400 dark:bg-slate-400"
+                  style={placement.lineStyle}
+                />
+              )}
 
-                {/* Desktop/Tablet content */}
-                <div className="hidden md:block">
-                  <div className="font-medium">{LABEL[z.key]}</div>
-                  <div className="opacity-80">
-                    {stat.made}/{stat.attempts} ({stat.acc}%)
-                  </div>
+              {/* OUTSIDE/INSIDE LABEL PILL (responsive) */}
+              <div
+                className={[
+                  "absolute",
+                  "rounded-lg",
+                  "px-2 py-1",
+                  "text-[11px] md:text-xs",
+                  "leading-tight",
+                  "bg-[rgba(250,250,210,0.92)]",
+                  "shadow-sm",
+                  "text-slate-900",
+                  "whitespace-nowrap",
+                  "font-medium",
+                ].join(" ")}
+                style={placement.pillStyle}
+              >
+                <div className="text-[11px] md:text-[12px] font-semibold text-center">
+                  {LABEL[z.key]}
                 </div>
+                <div className="text-[10px] md:text-[11px] opacity-90 text-center">
+                  {stat.made}/{stat.attempts}
+                </div>
+                <div className="text-[10px] md:text-[11px] opacity-75 text-center">
+                  ({stat.acc}%)
+                </div>
+              </div>
+
+              {/* Micro-label (percent only) visible on very tight screens if needed */}
+              <div className="md:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[11px] font-semibold text-black/90">
+                {stat.acc}%
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Legend (dark-mode tuned) */}
       <div className="flex items-center gap-2 mt-3 text-xs">
         <span className="opacity-70">Low</span>
         <div className="h-2 flex-1 rounded-full bg-gradient-to-r from-[#fee2e2] via-[#fde68a] to-[#bbf7d0] dark:from-rose-200 dark:via-yellow-300 dark:to-green-300" />
