@@ -1,22 +1,18 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { newSession } from "../lib/models";
+import SessionForm from "../components/SessionForm";
+
+// Sessions API
 import {
   listSessions,
   createSession,
   updateSession,
   deleteSession,
 } from "../lib/sessionApi";
-import SessionForm from "../components/SessionForm";
+import { newSession } from "../lib/models";
 
-// Analytics bits
-import HeatmapCourt from "../components/HeatmapCourt";
-import HeatmapCourtImage from "../components/HeatmapCourtImage";
-import AccuracyTrend from "../components/charts/AccuracyTrend";
-import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
-import AnalyticsFilters from "../components/AnalyticsFilters";
-import KpiTiles from "../components/KpiTiles";
+// Analytics helpers & UI
 import {
   filterSessions,
   aggregateByPosition,
@@ -24,70 +20,81 @@ import {
   aggregateByType,
   computeKpis,
 } from "../lib/analytics";
+import AnalyticsFilters from "../components/AnalyticsFilters";
+import KpiTiles from "../components/KpiTiles";
+import HeatmapCourt from "../components/HeatmapCourt";
+import HeatmapCourtImage from "../components/HeatmapCourtImage";
+import AccuracyTrend from "../components/charts/AccuracyTrend";
+import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
 
-// DEV only helper
-import { seedSessions } from "../dev/seedSessions";
-
-// Toasts
+// UI bits
 import { toast } from "sonner";
-
-// UI
 import Spinner from "../components/ui/Spinner";
 import { Skeleton } from "../components/ui/Skeleton";
 
-// DEV slow helper
+// Dev helpers
+import { seedSessions } from "../dev/seedSessions";
 import { devDelay } from "../lib/devDelay";
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore();
 
-  // data
-  const [rows, setRows] = useState([]);
+  // ---------------- Data ----------------
+  const [rows, setRows] = useState([]); // all sessions for the user
 
-  // loading flags
+  // ---------------- Loading ----------------
   const [isLoading, setIsLoading] = useState(false);
-
-  // editor modal
-  const [editing, setEditing] = useState(null); // null | {id?, ...data}
-
-  // tabs
-  const [tab, setTab] = useState("log"); // 'log' | 'analytics'
-
-  // analytics filters
-  const [filters, setFilters] = useState({ windowDays: 30, types: [] });
-
-  // destructive op state
   const [clearing, setClearing] = useState(false);
 
-  // DEV slow toggle
+  // ---------------- Editor ----------------
+  const [editing, setEditing] = useState(null); // null | {id?, ...session}
+
+  // ---------------- Tabs ----------------
+  const [tab, setTab] = useState("analytics"); // 'log' | 'analytics'
+
+  // ---------------- DEV: slow toggle via ?slow ----------------
   const [slowEnabled, setSlowEnabled] = useState(
     import.meta.env.DEV && new URLSearchParams(location.search).has("slow")
   );
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    const onPop = () => {
+    const onPop = () =>
       setSlowEnabled(new URLSearchParams(location.search).has("slow"));
-    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  // Load ALL sessions by following Firestore cursors
-  const load = async (reset = false) => {
+  // ---------------- Analytics filters (DEFAULT = last 7 days) ----------------
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const sevenAgoISO = new Date(Date.now() - 7 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+
+  const [filters, setFilters] = useState({
+    windowDays: 7, // label for KPI tiles / quick buttons
+    dateFrom: sevenAgoISO, // ISO 'YYYY-MM-DD'
+    dateTo: todayISO, // ISO 'YYYY-MM-DD'
+    types: [], // [] = all
+    direction: undefined, // 'L->R' | 'R->L' | 'static' | 'all'
+    range: undefined, // 'paint' | 'midrange' | '3pt' | 'all'
+  });
+
+  // ---------------- Load ALL sessions (paginate until end) ----------------
+  const load = async () => {
     if (!user) return;
     try {
       setIsLoading(true);
-      await devDelay(900); // visible skeletons in dev when ?slow
-      let nextCursor = null;
+      await devDelay(900); // visible skeletons in dev with ?slow
+      let next = null;
       const all = [];
       do {
-        const { docs, cursor } = await listSessions(user.uid, 50, nextCursor);
+        const { docs, cursor } = await listSessions(user.uid, 50, next);
         all.push(...docs);
-        nextCursor = cursor || null;
-      } while (nextCursor);
+        next = cursor || null;
+      } while (next);
       setRows(all);
     } catch (e) {
-      console.error("Fetch failed:", e);
+      console.error("Load sessions failed:", e);
       toast.error(e?.message || "Failed to load sessions");
     } finally {
       setIsLoading(false);
@@ -95,53 +102,52 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    load(true);
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user?.uid]);
 
+  // ---------------- CRUD handlers ----------------
   const onCreateClick = () => setEditing(newSession(user.uid));
   const onEditClick = (row) => setEditing({ id: row.id, ...row });
 
   const onDeleteClick = async (id) => {
-    const ok = window.confirm("Delete this session? This action cannot be undone.");
+    const ok = window.confirm(
+      "Delete this session? This action cannot be undone."
+    );
     if (!ok) return;
     try {
       await deleteSession(id);
       toast.success("Session deleted");
-      await load(true);
+      await load();
     } catch (err) {
-      console.error("[Dashboard] delete failed:", err);
+      console.error("Delete failed:", err);
       toast.error(err?.message || "Failed to delete session");
     }
   };
 
   const onClearAll = async () => {
     if (!rows.length) return;
-    const confirm1 = window.confirm(
-      "Clear ALL sessions in your log? This cannot be undone."
-    );
-    if (!confirm1) return;
-    const phrase = prompt('Type "CLEAR" to confirm deleting ALL sessions:');
+    const ok1 = window.confirm("Clear ALL sessions in your log?");
+    if (!ok1) return;
+    const phrase = prompt('Type "CLEAR" to confirm:');
     if (phrase !== "CLEAR") return;
 
     setClearing(true);
     try {
-      // batch-delete everything
-      let nextCursor = null;
+      let next = null;
       let total = 0;
       do {
-        const { docs, cursor } = await listSessions(user.uid, 50, nextCursor);
+        const { docs, cursor } = await listSessions(user.uid, 50, next);
         const ids = docs.map((d) => d.id);
         total += ids.length;
         if (ids.length) await Promise.all(ids.map((id) => deleteSession(id)));
-        nextCursor = cursor || null;
-      } while (nextCursor);
-
-      await load(true);
+        next = cursor || null;
+      } while (next);
       toast.success(`Cleared ${total} session${total === 1 ? "" : "s"}`);
-    } catch (err) {
-      console.error("[Dashboard] clear log failed:", err);
-      toast.error(err?.message || "Failed to clear log");
+      await load();
+    } catch (e) {
+      console.error("Clear log failed:", e);
+      toast.error(e?.message || "Failed to clear log");
     } finally {
       setClearing(false);
     }
@@ -149,7 +155,7 @@ export default function Dashboard() {
 
   const onSave = async (data) => {
     try {
-      const payload = { ...data, userId: user.uid }; // ownership guard
+      const payload = { ...data, userId: user.uid };
       if (editing?.id) {
         await updateSession(editing.id, payload);
         toast.success("Session updated");
@@ -158,38 +164,50 @@ export default function Dashboard() {
         toast.success("Session created");
       }
       setEditing(null);
-      await load(true); // reload all
-    } catch (err) {
-      console.error("[Dashboard] save failed:", err);
-      toast.error(err?.message || "Failed to save session");
+      await load();
+    } catch (e) {
+      console.error("Save failed:", e);
+      toast.error(e?.message || "Failed to save session");
     }
   };
 
-  // ----- Analytics computed data -----
-  const filtered = useMemo(() => filterSessions(rows, filters), [rows, filters]);
-  const aggOpts = { direction: filters.direction, range: filters.range };
+  // ---------------- Analytics: compute from FILTERED set ----------------
+  const filtered = useMemo(
+    () =>
+      filterSessions(rows, {
+        // ✅ use correct keys for the helper
+        from: filters.dateFrom,
+        to: filters.dateTo,
+        types: filters.types,
+      }),
+    [rows, filters.dateFrom, filters.dateTo, filters.types]
+  );
 
+  const aggOpts = useMemo(
+    () => ({ direction: filters.direction, range: filters.range }),
+    [filters.direction, filters.range]
+  );
+
+  const kpis = useMemo(() => computeKpis(filtered, aggOpts), [filtered, aggOpts]);
   const byPos = useMemo(
     () => aggregateByPosition(filtered, aggOpts),
-    [filtered, filters]
+    [filtered, aggOpts]
   );
   const trend = useMemo(
     () => aggregateAccuracyByDate(filtered, aggOpts),
-    [filtered, filters]
+    [filtered, aggOpts]
   );
   const byType = useMemo(
     () => aggregateByType(filtered, aggOpts),
-    [filtered, filters]
-  );
-  const kpis = useMemo(
-    () => computeKpis(filtered, { sinceDays: filters.windowDays || 7, ...aggOpts }),
-    [filtered, filters]
+    [filtered, aggOpts]
   );
 
-  // Hydration flags to avoid layout shift (reserve heights)
-  const hasAnyData = rows.length > 0;
-  const showLogSkeleton = isLoading && !hasAnyData;
-  const showAnalyticsSkeleton = isLoading && !hasAnyData;
+  // ---------------- Skeleton flags ----------------
+  const hasAny = rows.length > 0;
+  const showSkelKPIs = isLoading && !hasAny;
+  const showSkelHeat = isLoading && !hasAny;
+  const showSkelTrend = isLoading && !hasAny;
+  const showSkelBar = isLoading && !hasAny;
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
@@ -201,7 +219,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-2">
           {import.meta.env.DEV && (
             <>
-              {/* DEV: Simulate slow toggle */}
+              {/* Simulate slow */}
               <button
                 type="button"
                 onClick={() => {
@@ -228,7 +246,7 @@ export default function Dashboard() {
                 className={`rounded-lg px-3 py-2 text-sm border inline-flex items-center gap-2 ${
                   slowEnabled ? "bg-yellow-50 border-yellow-300 text-yellow-800" : "hover:bg-gray-50"
                 }`}
-                title="Toggle ?slow to simulate network/processing delays (dev only)"
+                title="Toggle ?slow to simulate delays (dev only)"
               >
                 <span
                   className="inline-block w-2 h-2 rounded-full"
@@ -237,27 +255,27 @@ export default function Dashboard() {
                 {slowEnabled ? "Simulate slow: ON" : "Simulate slow: OFF"}
               </button>
 
-              {/* Seed (dev) */}
+              {/* Seed */}
               <button
                 className="border rounded-lg px-3 py-2 text-sm"
+                title="Create random sessions for testing"
                 onClick={async () => {
                   try {
                     const n = 25;
                     await seedSessions(user.uid, n);
-                    await load(true);
+                    await load();
                     toast.success(`Seeded ${n} sessions`);
                   } catch (e) {
-                    console.error("Seeding failed:", e);
+                    console.error("Seed failed:", e);
                     toast.error(e?.message || "Seeding failed");
                   }
                 }}
-                title="Create random sessions for testing"
               >
                 Seed 25 sessions
               </button>
             </>
           )}
-          <button onClick={logout} className="border rounded-lg px-3 py-2 text-sm md:text-base">
+          <button onClick={logout} className="border rounded-lg px-3 py-2">
             Logout
           </button>
         </div>
@@ -273,13 +291,11 @@ export default function Dashboard() {
         </TabButton>
       </div>
 
-      {/* Content */}
       {tab === "log" ? (
         <LogSection
           rows={rows}
-          clearing={clearing}
           isLoading={isLoading}
-          showSkeleton={showLogSkeleton}
+          clearing={clearing}
           onCreate={onCreateClick}
           onEdit={onEditClick}
           onDelete={onDeleteClick}
@@ -287,14 +303,16 @@ export default function Dashboard() {
         />
       ) : (
         <AnalyticsSection
-          isLoading={isLoading}
-          showSkeleton={showAnalyticsSkeleton}
           filters={filters}
           setFilters={setFilters}
           kpis={kpis}
           byPos={byPos}
           trend={trend}
           byType={byType}
+          showSkelKPIs={showSkelKPIs}
+          showSkelHeat={showSkelHeat}
+          showSkelTrend={showSkelTrend}
+          showSkelBar={showSkelBar}
         />
       )}
 
@@ -305,7 +323,11 @@ export default function Dashboard() {
             <h2 className="text-lg md:text-xl font-semibold mb-3">
               {editing.id ? "Edit session" : "New session"}
             </h2>
-            <SessionForm initial={editing} onSubmit={onSave} onCancel={() => setEditing(null)} />
+            <SessionForm
+              initial={editing}
+              onSubmit={onSave}
+              onCancel={() => setEditing(null)}
+            />
           </div>
         </div>
       )}
@@ -313,12 +335,12 @@ export default function Dashboard() {
   );
 }
 
-/* ---------- Log (Sessions list) ---------- */
+/* ---------------- Log (table) ---------------- */
+
 function LogSection({
   rows,
-  clearing,
   isLoading,
-  showSkeleton,
+  clearing,
   onCreate,
   onEdit,
   onDelete,
@@ -333,10 +355,10 @@ function LogSection({
   const [pageSize, setPageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
 
-  const parseDate = (s) => (s ? new Date(s) : null);
   const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const parseDate = (s) => (s ? new Date(s) : null);
 
-  // 1) Filter (type + date range)
+  // Filter
   const filtered = useMemo(() => {
     const f = parseDate(from);
     const t = parseDate(to);
@@ -349,7 +371,7 @@ function LogSection({
     });
   }, [rows, typeFilter, from, to]);
 
-  // 2) Sort (date/type/accuracy)
+  // Sort
   const sorted = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
@@ -360,15 +382,15 @@ function LogSection({
         return cmp(a.type || "", b.type || "") * dir;
       }
       if (sortKey === "accuracy") {
-        const accA = a.totals?.attempts ? a.totals.made / a.totals.attempts : 0;
-        const accB = b.totals?.attempts ? b.totals.made / b.totals.attempts : 0;
-        return cmp(accA, accB) * dir;
+        const aA = a.totals?.attempts ? a.totals.made / a.totals.attempts : 0;
+        const aB = b.totals?.attempts ? b.totals.made / b.totals.attempts : 0;
+        return cmp(aA, aB) * dir;
       }
       return 0;
     });
   }, [filtered, sortKey, sortDir]);
 
-  // 3) Client-side pagination (kept for UX on very large lists)
+  // Pagination (client-side)
   const total = sorted.length;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, pages - 1);
@@ -376,12 +398,20 @@ function LogSection({
   const end = start + pageSize;
   const paged = sorted.slice(start, end);
 
-  // 4) CSV export (filtered+sorted rows)
+  // CSV
   const exportCsv = async () => {
     try {
       setExporting(true);
-      await devDelay(1200); // simulate slow export (dev + ?slow)
-      const headers = ["Date", "Type", "Rounds", "Accuracy", "Attempts", "Made", "Notes"];
+      await devDelay(1200);
+      const headers = [
+        "Date",
+        "Type",
+        "Rounds",
+        "Accuracy",
+        "Attempts",
+        "Made",
+        "Notes",
+      ];
       const toRow = (s) => {
         const attempts = Number(s.totals?.attempts || 0);
         const made = Number(s.totals?.made || 0);
@@ -407,14 +437,13 @@ function LogSection({
       URL.revokeObjectURL(url);
       toast.success(`Exported ${sorted.length} row${sorted.length === 1 ? "" : "s"}`);
     } catch (e) {
-      console.error("CSV export failed", e);
+      console.error("Export failed:", e);
       toast.error("Export failed");
     } finally {
       setExporting(false);
     }
   };
 
-  // Sortable header cell
   const Th = ({ k, children }) => (
     <th
       className={`text-left p-3 select-none ${
@@ -442,23 +471,24 @@ function LogSection({
     <div className="space-y-3 md:space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={onCreate} className="bg-black text-white rounded-xl px-4 py-2 text-sm md:text-base">
+        <button
+          onClick={onCreate}
+          className="bg-black text-white rounded-xl px-4 py-2 text-sm md:text-base"
+        >
           New session
         </button>
 
-        {/* Clear log */}
         <button
           onClick={onClearAll}
           disabled={!rows.length || clearing}
           className={`rounded-xl px-3 py-2 border text-sm md:text-base ${
             clearing ? "opacity-60 cursor-not-allowed" : "hover:bg-red-50"
           } text-red-600`}
-          title="Delete ALL sessions for your account"
+          title="Delete ALL sessions"
         >
           {clearing ? "Clearing…" : "Clear log"}
         </button>
 
-        {/* Type filter */}
         <select
           value={typeFilter}
           onChange={(e) => {
@@ -475,7 +505,6 @@ function LogSection({
           <option value="run_half">run_half</option>
         </select>
 
-        {/* Date range */}
         <input
           type="date"
           value={from}
@@ -484,7 +513,6 @@ function LogSection({
             setPage(0);
           }}
           className="border rounded-lg p-2 text-sm md:text-base"
-          title="From"
         />
         <input
           type="date"
@@ -494,16 +522,14 @@ function LogSection({
             setPage(0);
           }}
           className="border rounded-lg p-2 text-sm md:text-base"
-          title="To"
         />
 
-        {/* Right-side tools */}
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={exportCsv}
             disabled={!sorted.length || exporting}
             className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 disabled:opacity-40 inline-flex items-center gap-2"
-            title="Export filtered rows as CSV"
+            title="Export filtered rows"
           >
             {exporting && <Spinner size={14} />}
             Export CSV
@@ -529,7 +555,7 @@ function LogSection({
 
       {/* Table */}
       <div className="overflow-x-auto border rounded-2xl">
-        <table className="w-full text-sm md:text[15px]">
+        <table className="w-full text-sm md:text-[15px]">
           <thead className="bg-gray-50">
             <tr>
               <Th k="date">Date</Th>
@@ -541,9 +567,8 @@ function LogSection({
               <th className="text-left p-3">Actions</th>
             </tr>
           </thead>
-
           <tbody>
-            {showSkeleton
+            {isLoading
               ? Array.from({ length: 6 }).map((_, i) => (
                   <tr key={`sk-${i}`} className="border-t">
                     <td className="p-3"><Skeleton className="h-4 w-24" /></td>
@@ -582,8 +607,7 @@ function LogSection({
                     </tr>
                   );
                 })}
-
-            {!showSkeleton && !paged.length && (
+            {!isLoading && !paged.length && (
               <tr>
                 <td className="p-3" colSpan={7}>
                   {rows.length ? "No results for current filters." : "No sessions yet."}
@@ -594,7 +618,7 @@ function LogSection({
         </table>
       </div>
 
-      {/* Pagination footer (still useful for local table paging) */}
+      {/* Pagination */}
       <div className="flex justify-end items-center gap-2 min-h-[36px]">
         <button
           disabled={safePage === 0}
@@ -619,14 +643,27 @@ function LogSection({
   );
 }
 
-/* ---------- Analytics UI ---------- */
-function AnalyticsSection({ isLoading, showSkeleton, filters, setFilters, kpis, byPos, trend, byType }) {
+/* ---------------- Analytics section ---------------- */
+
+function AnalyticsSection({
+  filters,
+  setFilters,
+  kpis,
+  byPos,
+  trend,
+  byType,
+  showSkelKPIs,
+  showSkelHeat,
+  showSkelTrend,
+  showSkelBar,
+}) {
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* KPIs + Filters (reserve height to avoid jump) */}
+      {/* Filters + KPI tiles */}
       <div className="min-h-[88px]">
-        {showSkeleton ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <AnalyticsFilters value={filters} onChange={setFilters} />
+        {showSkelKPIs ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             <div className="border rounded-2xl p-4">
               <Skeleton className="h-3 w-28 mb-2" />
               <Skeleton className="h-7 w-20" />
@@ -641,17 +678,16 @@ function AnalyticsSection({ isLoading, showSkeleton, filters, setFilters, kpis, 
             </div>
           </div>
         ) : (
-          <>
-            <AnalyticsFilters value={filters} onChange={setFilters} />
+          <div className="mt-4">
             <KpiTiles kpis={kpis} windowDays={filters.windowDays || 7} />
-          </>
+          </div>
         )}
       </div>
 
-      {/* Heatmaps: left list + right image, with skeletons reserving space */}
+      {/* Heatmaps */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,380px),1fr] gap-4 md:gap-6 items-start">
         <div className="lg:sticky lg:top-4">
-          {showSkeleton ? (
+          {showSkelHeat ? (
             <div className="border rounded-2xl p-4">
               <Skeleton className="h-4 w-40 mb-3" />
               <div className="space-y-2">
@@ -666,11 +702,8 @@ function AnalyticsSection({ isLoading, showSkeleton, filters, setFilters, kpis, 
         </div>
 
         <div className="w-full">
-          {showSkeleton ? (
-            <div
-              className="border rounded-2xl p-3"
-              style={{ aspectRatio: "600 / 567" }}
-            >
+          {showSkelHeat ? (
+            <div className="border rounded-2xl p-3" style={{ aspectRatio: "600 / 567" }}>
               <Skeleton className="w-full h-full rounded-xl" />
             </div>
           ) : (
@@ -681,23 +714,25 @@ function AnalyticsSection({ isLoading, showSkeleton, filters, setFilters, kpis, 
               direction={filters.direction}
               width={600}
               height={567}
-              flip={true} // offense view
+              flip={true}
               className="w-full max-w-[620px] mx-auto"
             />
           )}
         </div>
       </div>
 
+      {/* Trend */}
       <div className="min-h-[220px]">
-        {showSkeleton ? (
+        {showSkelTrend ? (
           <Skeleton className="h-[220px] w-full rounded-2xl" />
         ) : (
           <AccuracyTrend data={trend} />
         )}
       </div>
 
+      {/* Attempts vs Made */}
       <div className="min-h-[220px]">
-        {showSkeleton ? (
+        {showSkelBar ? (
           <Skeleton className="h-[220px] w-full rounded-2xl" />
         ) : (
           <AttemptsVsMadeByType data={byType} />
@@ -707,7 +742,8 @@ function AnalyticsSection({ isLoading, showSkeleton, filters, setFilters, kpis, 
   );
 }
 
-/* ---------- Small components & utils ---------- */
+/* ---------------- Small components & utils ---------------- */
+
 function TabButton({ active, onClick, children }) {
   return (
     <button
@@ -724,14 +760,14 @@ function TabButton({ active, onClick, children }) {
 /** per-range summary string for list view */
 function summarizeByRange(session) {
   const totals = {};
-  (session.rounds || []).forEach((round) => {
-    (round.zones || []).forEach((z) => {
-      const key = z.range || round.range || "unknown";
+  (session.rounds || []).forEach((r) =>
+    (r.zones || []).forEach((z) => {
+      const key = z.range || r.range || "unknown";
       if (!totals[key]) totals[key] = { m: 0, a: 0 };
       totals[key].m += Number(z.made || 0);
       totals[key].a += Number(z.attempts || 0);
-    });
-  });
+    })
+  );
 
   return Object.entries(totals)
     .filter(([, v]) => v.a > 0)
