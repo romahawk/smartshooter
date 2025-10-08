@@ -1,4 +1,3 @@
-// src/components/SessionForm.jsx
 import { useState } from "react";
 import {
   TRAINING_TYPES,
@@ -9,8 +8,8 @@ import {
   pretty,
   normalizeInitial,
 } from "../lib/models";
+import { toast } from "sonner"; // ✅ toasts for validation
 
-/** Visual order of positions based on direction */
 function orderForDirection(dir) {
   const isRTL =
     dir === "R→L" ||
@@ -19,7 +18,7 @@ function orderForDirection(dir) {
     dir === "rtl";
   return isRTL
     ? ["right_corner", "right_wing", "center", "left_wing", "left_corner"]
-    : ["left_corner", "left_wing", "center", "right_wing", "right_corner"]; // static / L→R
+    : ["left_corner", "left_wing", "center", "right_wing", "right_corner"];
 }
 
 export default function SessionForm({ initial, onSubmit, onCancel }) {
@@ -51,7 +50,6 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
         .map((r, idx) => ({ ...r, roundIndex: idx })),
     }));
 
-  // Apply range to entire round (and mirror into zones)
   const onChangeRoundRange = (i, newRange) =>
     setModel((m) => {
       const rounds = [...m.rounds];
@@ -60,7 +58,6 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
       return { ...m, rounds };
     });
 
-  // Apply attempts per zone (shots/round) to the whole round
   const onChangeShotsPerZone = (i, val) =>
     setModel((m) => {
       const n = Number(val);
@@ -68,7 +65,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
       const zones = rounds[i].zones.map((z) => ({
         ...z,
         attempts: n,
-        made: Math.min(Number(z.made || 0), n), // clamp made ≤ attempts
+        made: Math.min(Number(z.made || 0), n),
       }));
       rounds[i] = { ...rounds[i], shotsPerZone: n, zones };
       return { ...m, rounds };
@@ -85,9 +82,11 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
 
   const submit = () => {
     const err = validate();
-    if (err) return alert(err);
+    if (err) {
+      toast.error(err); // ✅ surface validation via toast
+      return;
+    }
 
-    // Ensure zones mirror round.range and round.shotsPerZone before save
     const normalizedRounds = model.rounds.map((r) => ({
       ...r,
       zones: r.zones.map((z) => ({
@@ -118,7 +117,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* Header: mobile-first grid */}
+      {/* Header */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs md:text-sm opacity-70">Date</label>
@@ -160,7 +159,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
       {/* Rounds */}
       {model.rounds.map((r, i) => (
         <div key={i} className="border rounded-2xl p-3 md:p-4 space-y-3 md:space-y-4">
-          {/* Round header controls: responsive grid */}
+          {/* Round header controls */}
           <div className="grid gap-2 sm:gap-3 grid-cols-2 md:grid-cols-5 items-center">
             <div className="col-span-2 md:col-span-1 flex items-center">
               <span className="font-medium text-sm md:text-base">Round {i + 1}</span>
@@ -188,14 +187,13 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
               </select>
             </div>
 
-            {/* Range for ALL zones */}
+            {/* Range */}
             <div className="col-span-1">
               <label className="block text-xs opacity-70 mb-1">Range</label>
               <select
                 value={r.range}
                 onChange={(e) => onChangeRoundRange(i, e.target.value)}
                 className="w-full border rounded-lg p-2 text-sm md:text-base"
-                title="Shot range for all positions in this round"
                 aria-label="Range"
               >
                 {RANGE_TYPES.map((rt) => (
@@ -206,14 +204,13 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
               </select>
             </div>
 
-            {/* shots/round (attempts per zone) */}
+            {/* shots/zone */}
             <div className="col-span-1">
               <label className="block text-xs opacity-70 mb-1">Shots per zone</label>
               <select
                 value={r.shotsPerZone ?? 10}
                 onChange={(e) => onChangeShotsPerZone(i, e.target.value)}
                 className="w-full border rounded-lg p-2 text-sm md:text-base"
-                title="Attempts per position for this round"
                 aria-label="Shots per zone"
               >
                 {[5, 10, 20].map((n) => (
@@ -235,7 +232,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
             </div>
           </div>
 
-          {/* Zone cards: 1/2/3 columns */}
+          {/* Zones grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
             {(orderForDirection(r.direction) || ZONE_POSITIONS).map((pos) => {
               const z =
@@ -255,9 +252,8 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
                     </span>
                   </div>
 
-                  {/* Inputs row as grid for stable widths */}
                   <div className="grid grid-cols-2 gap-2">
-                    {/* Made (editable) */}
+                    {/* Made */}
                     <div className="flex flex-col gap-1">
                       <label className="text-xs opacity-70">Made</label>
                       <input
@@ -276,7 +272,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
                       />
                     </div>
 
-                    {/* Attempts (read-only, reflects shotsPerZone) */}
+                    {/* Attempts (read-only) */}
                     <div className="flex flex-col gap-1">
                       <label className="text-xs opacity-70">Attempts</label>
                       <input
@@ -326,7 +322,6 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
   );
 }
 
-/** utils */
 function sum(model, key) {
   return model.rounds
     .flatMap((r) => r.zones)
