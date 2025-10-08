@@ -1,53 +1,74 @@
-// src/components/AnalyticsFilters.jsx
-import React, { useMemo } from "react";
+import React, { useEffect } from "react";
 
-const TYPES = ["spot", "catch_shoot", "off_dribble", "run_half"];
-const DIRECTIONS = [
-  { value: "", label: "All directions" },
-  { value: "static", label: "static" },
-  { value: "left_to_right", label: "L→R" },
-  { value: "right_to_left", label: "R→L" },
-];
-const RANGES = [
-  { value: "", label: "All ranges" },
-  { value: "paint", label: "paint" },
-  { value: "midrange", label: "midrange" },
-  { value: "3pt", label: "3pt" },
-];
-
+/**
+ * Controlled analytics filters.
+ * Parent owns the state; we never force our own 90d range.
+ *
+ * value: {
+ *   windowDays: number,
+ *   dateFrom: 'YYYY-MM-DD',
+ *   dateTo: 'YYYY-MM-DD',
+ *   types: string[],
+ *   direction?: 'L->R'|'R->L'|'static'|'all',
+ *   range?: 'paint'|'midrange'|'3pt'|'all'
+ * }
+ */
 export default function AnalyticsFilters({ value, onChange }) {
   const v = value || {};
-  const set = (patch) => onChange?.({ ...v, ...patch });
+  const set = (patch) => onChange({ ...v, ...patch });
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const toStr = (d) => d?.toISOString?.().slice(0, 10) ?? "";
-
-  const onPreset = (days) => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - days);
-    set({ from, to, windowDays: days });
+  const applyWindow = (days) => {
+    const today = new Date();
+    const toISO = today.toISOString().slice(0, 10);
+    const fromISO = new Date(today.getTime() - days * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    set({ windowDays: days, dateFrom: fromISO, dateTo: toISO });
   };
 
+  // On first mount: if the parent forgot dates, derive from windowDays (default 7)
+  useEffect(() => {
+    if (!v.dateFrom || !v.dateTo) {
+      applyWindow(Number(v.windowDays || 7));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Helpers
+  const isActive = (d) => Number(v.windowDays) === d;
   const toggleType = (t) => {
-    const cur = new Set(v.types || []);
-    if (cur.has(t)) cur.delete(t);
-    else cur.add(t);
-    set({ types: Array.from(cur) });
+    const setTypes = new Set(v.types || []);
+    if (setTypes.has(t)) setTypes.delete(t);
+    else setTypes.add(t);
+    set({ types: Array.from(setTypes) });
+  };
+
+  const onDateFromChange = (fromISO) => {
+    const toISO = v.dateTo || new Date().toISOString().slice(0, 10);
+    set({
+      dateFrom: fromISO,
+      windowDays: diffDays(fromISO, toISO),
+    });
+  };
+  const onDateToChange = (toISO) => {
+    const fromISO = v.dateFrom || toISO;
+    set({
+      dateTo: toISO,
+      windowDays: diffDays(fromISO, toISO),
+    });
   };
 
   return (
-    <div className="border rounded-2xl p-3 space-y-3">
-      <div className="text-sm font-semibold">Filters</div>
-
-      {/* Presets */}
-      <div className="flex gap-2">
+    <div className="space-y-3 md:space-y-4">
+      {/* Window buttons */}
+      <div className="flex gap-2 flex-wrap">
         {[7, 30, 90].map((d) => (
           <button
             key={d}
-            onClick={() => onPreset(d)}
-            className={`px-3 py-1 rounded-lg border ${
-              v.windowDays === d ? "bg-black text-white" : ""
+            type="button"
+            onClick={() => applyWindow(d)}
+            className={`px-3 py-2 rounded-lg border text-sm ${
+              isActive(d) ? "bg-black text-white border-black" : "hover:bg-gray-50"
             }`}
           >
             {d}d
@@ -55,74 +76,85 @@ export default function AnalyticsFilters({ value, onChange }) {
         ))}
       </div>
 
-      {/* Custom date range */}
-      <div className="grid grid-cols-2 gap-2">
+      {/* Date pickers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <input
           type="date"
-          value={toStr(v.from)}
-          onChange={(e) =>
-            set({ from: e.target.value ? new Date(e.target.value) : undefined })
-          }
+          value={v.dateFrom || ""}
+          onChange={(e) => onDateFromChange(e.target.value)}
           className="border rounded-lg p-2"
-          max={todayStr}
+          title="From"
         />
         <input
           type="date"
-          value={toStr(v.to)}
-          onChange={(e) =>
-            set({ to: e.target.value ? new Date(e.target.value) : undefined })
-          }
+          value={v.dateTo || ""}
+          onChange={(e) => onDateToChange(e.target.value)}
           className="border rounded-lg p-2"
-          max={todayStr}
+          title="To"
         />
       </div>
 
-      {/* Training types */}
-      <div className="flex flex-wrap gap-2">
-        {TYPES.map((t) => {
-          const active = (v.types || []).includes(t);
+      {/* Type pills */}
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { k: "spot", label: "Spot" },
+          { k: "catch_shoot", label: "Catch Shoot" },
+          { k: "off_dribble", label: "Off Dribble" },
+          { k: "run_half", label: "Run Half" },
+        ].map((t) => {
+          const active = (v.types || []).includes(t.k);
           return (
             <button
-              key={t}
-              onClick={() => toggleType(t)}
-              className={`px-3 py-1 rounded-lg border capitalize ${
-                active ? "bg-black text-white" : ""
+              key={t.k}
+              type="button"
+              onClick={() => toggleType(t.k)}
+              className={`px-3 py-2 rounded-lg border text-sm ${
+                active ? "bg-black text-white border-black" : "hover:bg-gray-50"
               }`}
             >
-              {t.replaceAll("_", " ")}
+              {t.label}
             </button>
           );
         })}
       </div>
 
-      {/* Direction + Range */}
-      <div className="flex gap-2">
+      {/* Direction / range */}
+      <div className="flex gap-2 flex-wrap">
         <select
-          value={v.direction ?? ""}
-          onChange={(e) => set({ direction: e.target.value || undefined })}
-          className="border rounded-lg p-2"
-          title="Drill direction"
+          value={v.direction || "all"}
+          onChange={(e) => set({ direction: e.target.value })}
+          className="border rounded-lg p-2 text-sm"
+          title="Direction"
         >
-          {DIRECTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
+          <option value="all">All directions</option>
+          <option value="L->R">L→R</option>
+          <option value="R->L">R→L</option>
+          <option value="static">static</option>
         </select>
 
         <select
-          value={v.range ?? ""}
-          onChange={(e) => set({ range: e.target.value || undefined })}
-          className="border rounded-lg p-2"
-          title="Shot range"
+          value={v.range || "all"}
+          onChange={(e) => set({ range: e.target.value })}
+          className="border rounded-lg p-2 text-sm"
+          title="Range"
         >
-          {RANGES.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
+          <option value="all">All ranges</option>
+          <option value="paint">paint</option>
+          <option value="midrange">midrange</option>
+          <option value="3pt">3pt</option>
         </select>
       </div>
     </div>
   );
+}
+
+/* utils */
+function diffDays(fromISO, toISO) {
+  if (!fromISO || !toISO) return 7;
+  const from = new Date(fromISO);
+  const to = new Date(toISO);
+  // inclusive window (e.g., 7d when from is 7 days before to)
+  const ms = to.setHours(0, 0, 0, 0) - from.setHours(0, 0, 0, 0);
+  const days = Math.max(1, Math.round(ms / 86400000));
+  return days;
 }
