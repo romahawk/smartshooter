@@ -1,3 +1,4 @@
+// src/pages/Dashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { newSession } from "../lib/models";
@@ -27,15 +28,24 @@ import {
 // DEV only helper
 import { seedSessions } from "../dev/seedSessions";
 
-// ✅ Toasts
+// Toasts
 import { toast } from "sonner";
+
+// UI
+import Spinner from "../components/ui/Spinner";
+import { Skeleton } from "../components/ui/Skeleton";
+
+// DEV slow helper
+import { devDelay } from "../lib/devDelay";
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore();
 
-  // data + pagination (server cursor)
+  // data
   const [rows, setRows] = useState([]);
-  const [cursor, setCursor] = useState(null);
+
+  // loading flags
+  const [isLoading, setIsLoading] = useState(false);
 
   // editor modal
   const [editing, setEditing] = useState(null); // null | {id?, ...data}
@@ -49,11 +59,39 @@ export default function Dashboard() {
   // destructive op state
   const [clearing, setClearing] = useState(false);
 
+  // DEV slow toggle
+  const [slowEnabled, setSlowEnabled] = useState(
+    import.meta.env.DEV && new URLSearchParams(location.search).has("slow")
+  );
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const onPop = () => {
+      setSlowEnabled(new URLSearchParams(location.search).has("slow"));
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Load ALL sessions by following Firestore cursors
   const load = async (reset = false) => {
     if (!user) return;
-    const res = await listSessions(user.uid, 10, reset ? null : cursor);
-    setRows(reset ? res.docs : [...rows, ...res.docs]);
-    setCursor(res.cursor || null);
+    try {
+      setIsLoading(true);
+      await devDelay(900); // visible skeletons in dev when ?slow
+      let nextCursor = null;
+      const all = [];
+      do {
+        const { docs, cursor } = await listSessions(user.uid, 50, nextCursor);
+        all.push(...docs);
+        nextCursor = cursor || null;
+      } while (nextCursor);
+      setRows(all);
+    } catch (e) {
+      console.error("Fetch failed:", e);
+      toast.error(e?.message || "Failed to load sessions");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -88,16 +126,15 @@ export default function Dashboard() {
 
     setClearing(true);
     try {
+      // batch-delete everything
       let nextCursor = null;
       let total = 0;
       do {
-        const { docs, cursor: cur } = await listSessions(user.uid, 50, nextCursor);
+        const { docs, cursor } = await listSessions(user.uid, 50, nextCursor);
         const ids = docs.map((d) => d.id);
         total += ids.length;
-        if (ids.length) {
-          await Promise.all(ids.map((id) => deleteSession(id)));
-        }
-        nextCursor = cur || null;
+        if (ids.length) await Promise.all(ids.map((id) => deleteSession(id)));
+        nextCursor = cursor || null;
       } while (nextCursor);
 
       await load(true);
@@ -121,7 +158,7 @@ export default function Dashboard() {
         toast.success("Session created");
       }
       setEditing(null);
-      await load(true);
+      await load(true); // reload all
     } catch (err) {
       console.error("[Dashboard] save failed:", err);
       toast.error(err?.message || "Failed to save session");
@@ -149,6 +186,11 @@ export default function Dashboard() {
     [filtered, filters]
   );
 
+  // Hydration flags to avoid layout shift (reserve heights)
+  const hasAnyData = rows.length > 0;
+  const showLogSkeleton = isLoading && !hasAnyData;
+  const showAnalyticsSkeleton = isLoading && !hasAnyData;
+
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
@@ -158,23 +200,62 @@ export default function Dashboard() {
         </h1>
         <div className="flex items-center gap-2">
           {import.meta.env.DEV && (
-            <button
-              className="border rounded-lg px-3 py-2 text-sm md:text-base"
-              onClick={async () => {
-                try {
-                  const n = 25;
-                  await seedSessions(user.uid, n);
-                  await load(true);
-                  toast.success(`Seeded ${n} sessions`);
-                } catch (e) {
-                  console.error("Seeding failed:", e);
-                  toast.error(e?.message || "Seeding failed");
-                }
-              }}
-              title="Create random sessions for testing pagination"
-            >
-              Seed 25 sessions
-            </button>
+            <>
+              {/* DEV: Simulate slow toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  const url = new URL(location.href);
+                  const params = url.searchParams;
+                  if (params.has("slow")) {
+                    params.delete("slow");
+                    history.pushState(
+                      {},
+                      "",
+                      `${url.pathname}${params.size ? "?" + params.toString() : ""}${url.hash || ""}`
+                    );
+                    setSlowEnabled(false);
+                  } else {
+                    params.set("slow", "1");
+                    history.pushState(
+                      {},
+                      "",
+                      `${url.pathname}?${params.toString()}${url.hash || ""}`
+                    );
+                    setSlowEnabled(true);
+                  }
+                }}
+                className={`rounded-lg px-3 py-2 text-sm border inline-flex items-center gap-2 ${
+                  slowEnabled ? "bg-yellow-50 border-yellow-300 text-yellow-800" : "hover:bg-gray-50"
+                }`}
+                title="Toggle ?slow to simulate network/processing delays (dev only)"
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ backgroundColor: slowEnabled ? "#ca8a04" : "#9ca3af" }}
+                />
+                {slowEnabled ? "Simulate slow: ON" : "Simulate slow: OFF"}
+              </button>
+
+              {/* Seed (dev) */}
+              <button
+                className="border rounded-lg px-3 py-2 text-sm"
+                onClick={async () => {
+                  try {
+                    const n = 25;
+                    await seedSessions(user.uid, n);
+                    await load(true);
+                    toast.success(`Seeded ${n} sessions`);
+                  } catch (e) {
+                    console.error("Seeding failed:", e);
+                    toast.error(e?.message || "Seeding failed");
+                  }
+                }}
+                title="Create random sessions for testing"
+              >
+                Seed 25 sessions
+              </button>
+            </>
           )}
           <button onClick={logout} className="border rounded-lg px-3 py-2 text-sm md:text-base">
             Logout
@@ -196,9 +277,9 @@ export default function Dashboard() {
       {tab === "log" ? (
         <LogSection
           rows={rows}
-          cursor={cursor}
           clearing={clearing}
-          onLoadMore={() => load()}
+          isLoading={isLoading}
+          showSkeleton={showLogSkeleton}
           onCreate={onCreateClick}
           onEdit={onEditClick}
           onDelete={onDeleteClick}
@@ -206,6 +287,8 @@ export default function Dashboard() {
         />
       ) : (
         <AnalyticsSection
+          isLoading={isLoading}
+          showSkeleton={showAnalyticsSkeleton}
           filters={filters}
           setFilters={setFilters}
           kpis={kpis}
@@ -230,12 +313,12 @@ export default function Dashboard() {
   );
 }
 
-/* ---------- Log (Sessions list) with filtering/sorting/pagination + CSV ---------- */
+/* ---------- Log (Sessions list) ---------- */
 function LogSection({
   rows,
-  cursor,
   clearing,
-  onLoadMore,
+  isLoading,
+  showSkeleton,
   onCreate,
   onEdit,
   onDelete,
@@ -248,6 +331,7 @@ function LogSection({
   const [sortDir, setSortDir] = useState("desc"); // 'asc' | 'desc'
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [exporting, setExporting] = useState(false);
 
   const parseDate = (s) => (s ? new Date(s) : null);
   const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -284,7 +368,7 @@ function LogSection({
     });
   }, [filtered, sortKey, sortDir]);
 
-  // 3) Client-side pagination
+  // 3) Client-side pagination (kept for UX on very large lists)
   const total = sorted.length;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, pages - 1);
@@ -293,24 +377,26 @@ function LogSection({
   const paged = sorted.slice(start, end);
 
   // 4) CSV export (filtered+sorted rows)
-  const exportCsv = () => {
-    const headers = ["Date", "Type", "Rounds", "Accuracy", "Attempts", "Made", "Notes"];
-    const toRow = (s) => {
-      const attempts = Number(s.totals?.attempts || 0);
-      const made = Number(s.totals?.made || 0);
-      const acc = attempts ? Math.round((made / attempts) * 100) : 0;
-      const notes = (s.notes || "").replace(/"/g, '""');
-      return [
-        s.date,
-        s.type,
-        s.rounds?.length ?? 0,
-        `${acc}%`,
-        attempts,
-        made,
-        `"${notes}"`,
-      ].join(",");
-    };
+  const exportCsv = async () => {
     try {
+      setExporting(true);
+      await devDelay(1200); // simulate slow export (dev + ?slow)
+      const headers = ["Date", "Type", "Rounds", "Accuracy", "Attempts", "Made", "Notes"];
+      const toRow = (s) => {
+        const attempts = Number(s.totals?.attempts || 0);
+        const made = Number(s.totals?.made || 0);
+        const acc = attempts ? Math.round((made / attempts) * 100) : 0;
+        const notes = (s.notes || "").replace(/"/g, '""');
+        return [
+          s.date,
+          s.type,
+          s.rounds?.length ?? 0,
+          `${acc}%`,
+          attempts,
+          made,
+          `"${notes}"`,
+        ].join(",");
+      };
       const csv = [headers.join(","), ...sorted.map(toRow)].join("\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -323,9 +409,12 @@ function LogSection({
     } catch (e) {
       console.error("CSV export failed", e);
       toast.error("Export failed");
+    } finally {
+      setExporting(false);
     }
   };
 
+  // Sortable header cell
   const Th = ({ k, children }) => (
     <th
       className={`text-left p-3 select-none ${
@@ -412,10 +501,11 @@ function LogSection({
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={exportCsv}
-            disabled={!sorted.length}
-            className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 disabled:opacity-40"
+            disabled={!sorted.length || exporting}
+            className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 disabled:opacity-40 inline-flex items-center gap-2"
             title="Export filtered rows as CSV"
           >
+            {exporting && <Spinner size={14} />}
             Export CSV
           </button>
 
@@ -434,18 +524,12 @@ function LogSection({
               </option>
             ))}
           </select>
-
-          {cursor && (
-            <button onClick={onLoadMore} className="border rounded-xl px-3 py-2 text-sm md:text-base">
-              Load more
-            </button>
-          )}
         </div>
       </div>
 
       {/* Table */}
       <div className="overflow-x-auto border rounded-2xl">
-        <table className="w-full text-sm md:text-[15px]">
+        <table className="w-full text-sm md:text[15px]">
           <thead className="bg-gray-50">
             <tr>
               <Th k="date">Date</Th>
@@ -457,36 +541,49 @@ function LogSection({
               <th className="text-left p-3">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {paged.map((r) => {
-              const att = Number(r.totals?.attempts || 0);
-              const made = Number(r.totals?.made || 0);
-              const acc = att ? Math.round((made / att) * 100) : 0;
-              return (
-                <tr key={r.id} className="border-t align-top">
-                  <td className="p-3 whitespace-nowrap">{r.date}</td>
-                  <td className="p-3 whitespace-nowrap">{r.type}</td>
-                  <td className="p-3">{summarizeByRange(r) || "—"}</td>
-                  <td className="p-3">{r.rounds?.length ?? 0}</td>
-                  <td className="p-3">{acc}%</td>
-                  <td className="p-3 max-w-[16rem]">
-                    <div className="truncate" title={r.notes || ""}>
-                      {r.notes || "—"}
-                    </div>
-                  </td>
-                  <td className="p-3 whitespace-nowrap">
-                    <button className="mr-2 underline" onClick={() => onEdit(r)}>
-                      Edit
-                    </button>
-                    <button className="underline" onClick={() => onDelete(r.id)}>
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
 
-            {!paged.length && (
+          <tbody>
+            {showSkeleton
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={`sk-${i}`} className="border-t">
+                    <td className="p-3"><Skeleton className="h-4 w-24" /></td>
+                    <td className="p-3"><Skeleton className="h-4 w-28" /></td>
+                    <td className="p-3"><Skeleton className="h-4 w-64" /></td>
+                    <td className="p-3"><Skeleton className="h-4 w-8" /></td>
+                    <td className="p-3"><Skeleton className="h-4 w-12" /></td>
+                    <td className="p-3"><Skeleton className="h-4 w-48" /></td>
+                    <td className="p-3"><Skeleton className="h-8 w-24" /></td>
+                  </tr>
+                ))
+              : paged.map((r) => {
+                  const att = Number(r.totals?.attempts || 0);
+                  const made = Number(r.totals?.made || 0);
+                  const acc = att ? Math.round((made / att) * 100) : 0;
+                  return (
+                    <tr key={r.id} className="border-t align-top">
+                      <td className="p-3 whitespace-nowrap">{r.date}</td>
+                      <td className="p-3 whitespace-nowrap">{r.type}</td>
+                      <td className="p-3">{summarizeByRange(r) || "—"}</td>
+                      <td className="p-3">{r.rounds?.length ?? 0}</td>
+                      <td className="p-3">{acc}%</td>
+                      <td className="p-3 max-w-[16rem]">
+                        <div className="truncate" title={r.notes || ""}>
+                          {r.notes || "—"}
+                        </div>
+                      </td>
+                      <td className="p-3 whitespace-nowrap">
+                        <button className="mr-2 underline" onClick={() => onEdit(r)}>
+                          Edit
+                        </button>
+                        <button className="underline" onClick={() => onDelete(r.id)}>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+            {!showSkeleton && !paged.length && (
               <tr>
                 <td className="p-3" colSpan={7}>
                   {rows.length ? "No results for current filters." : "No sessions yet."}
@@ -497,8 +594,8 @@ function LogSection({
         </table>
       </div>
 
-      {/* Pagination footer */}
-      <div className="flex justify-end items-center gap-2">
+      {/* Pagination footer (still useful for local table paging) */}
+      <div className="flex justify-end items-center gap-2 min-h-[36px]">
         <button
           disabled={safePage === 0}
           onClick={() => setPage((p) => Math.max(0, p - 1))}
@@ -522,37 +619,95 @@ function LogSection({
   );
 }
 
-function AnalyticsSection({ filters, setFilters, kpis, byPos, trend, byType }) {
+/* ---------- Analytics UI ---------- */
+function AnalyticsSection({ isLoading, showSkeleton, filters, setFilters, kpis, byPos, trend, byType }) {
   return (
     <div className="space-y-4 md:space-y-6">
-      <AnalyticsFilters value={filters} onChange={setFilters} />
-      <KpiTiles kpis={kpis} windowDays={filters.windowDays || 7} />
+      {/* KPIs + Filters (reserve height to avoid jump) */}
+      <div className="min-h-[88px]">
+        {showSkeleton ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="border rounded-2xl p-4">
+              <Skeleton className="h-3 w-28 mb-2" />
+              <Skeleton className="h-7 w-20" />
+            </div>
+            <div className="border rounded-2xl p-4">
+              <Skeleton className="h-3 w-28 mb-2" />
+              <Skeleton className="h-7 w-20" />
+            </div>
+            <div className="border rounded-2xl p-4">
+              <Skeleton className="h-3 w-28 mb-2" />
+              <Skeleton className="h-5 w-56" />
+            </div>
+          </div>
+        ) : (
+          <>
+            <AnalyticsFilters value={filters} onChange={setFilters} />
+            <KpiTiles kpis={kpis} windowDays={filters.windowDays || 7} />
+          </>
+        )}
+      </div>
 
-      {/* Heatmaps side-by-side on large screens; stacked on mobile */}
+      {/* Heatmaps: left list + right image, with skeletons reserving space */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,380px),1fr] gap-4 md:gap-6 items-start">
         <div className="lg:sticky lg:top-4">
-          <HeatmapCourt data={byPos} layout="stack" />
+          {showSkeleton ? (
+            <div className="border rounded-2xl p-4">
+              <Skeleton className="h-4 w-40 mb-3" />
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <HeatmapCourt data={byPos} layout="stack" />
+          )}
         </div>
+
         <div className="w-full">
-          <HeatmapCourtImage
-            data={byPos}
-            src="/court.png"
-            range={filters.range || "3pt"}
-            direction={filters.direction}
-            width={600}
-            height={567}
-            flip={true} // offense view
-            className="w-full max-w-[620px] mx-auto"
-          />
+          {showSkeleton ? (
+            <div
+              className="border rounded-2xl p-3"
+              style={{ aspectRatio: "600 / 567" }}
+            >
+              <Skeleton className="w-full h-full rounded-xl" />
+            </div>
+          ) : (
+            <HeatmapCourtImage
+              data={byPos}
+              src="/court.png"
+              range={filters.range || "3pt"}
+              direction={filters.direction}
+              width={600}
+              height={567}
+              flip={true} // offense view
+              className="w-full max-w-[620px] mx-auto"
+            />
+          )}
         </div>
       </div>
 
-      <AccuracyTrend data={trend} />
-      <AttemptsVsMadeByType data={byType} />
+      <div className="min-h-[220px]">
+        {showSkeleton ? (
+          <Skeleton className="h-[220px] w-full rounded-2xl" />
+        ) : (
+          <AccuracyTrend data={trend} />
+        )}
+      </div>
+
+      <div className="min-h-[220px]">
+        {showSkeleton ? (
+          <Skeleton className="h-[220px] w-full rounded-2xl" />
+        ) : (
+          <AttemptsVsMadeByType data={byType} />
+        )}
+      </div>
     </div>
   );
 }
 
+/* ---------- Small components & utils ---------- */
 function TabButton({ active, onClick, children }) {
   return (
     <button
@@ -566,6 +721,7 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
+/** per-range summary string for list view */
 function summarizeByRange(session) {
   const totals = {};
   (session.rounds || []).forEach((round) => {
