@@ -33,6 +33,17 @@ import Spinner from "../components/ui/Spinner";
 import { Skeleton } from "../components/ui/Skeleton";
 import ThemeToggle from "../components/ThemeToggle";
 
+// Icons (Lucide)
+import {
+  LogOut,
+  Turtle,
+  Sprout,
+  Plus,
+  Download,
+  Trash2,
+  Pencil,
+} from "lucide-react";
+
 // Dev helpers
 import { seedSessions } from "../dev/seedSessions";
 import { devDelay } from "../lib/devDelay";
@@ -72,12 +83,12 @@ export default function Dashboard() {
     .slice(0, 10);
 
   const [filters, setFilters] = useState({
-    windowDays: 7, // label for KPI tiles / quick buttons
+    windowDays: 7,       // label for KPI tiles / quick buttons
     dateFrom: sevenAgoISO, // ISO 'YYYY-MM-DD'
-    dateTo: todayISO, // ISO 'YYYY-MM-DD'
-    types: [], // [] = all
-    direction: undefined, // 'L->R' | 'R->L' | 'static' | 'all'
-    range: undefined, // 'paint' | 'midrange' | '3pt' | 'all'
+    dateTo: todayISO,      // ISO 'YYYY-MM-DD'
+    types: [],             // [] = all
+    direction: undefined,  // 'L->R' | 'R->L' | 'static' | 'all'
+    range: undefined,      // 'paint' | 'midrange' | '3pt' | 'all'
   });
 
   // ---------------- Load ALL sessions (paginate until end) ----------------
@@ -176,7 +187,7 @@ export default function Dashboard() {
   const filtered = useMemo(
     () =>
       filterSessions(rows, {
-        // ✅ pass correct keys that analytics.js expects
+        // ✅ analytics.js expects { from, to }
         from: filters.dateFrom,
         to: filters.dateTo,
         types: filters.types,
@@ -202,6 +213,32 @@ export default function Dashboard() {
     () => aggregateByType(filtered, aggOpts),
     [filtered, aggOpts]
   );
+
+  // Normalize zone data into an object expected by both heatmap components
+  // { [pos]: { acc, made, attempts } }
+  // NEW — supports array OR object from aggregateByPosition
+  const zonesForUi = useMemo(() => {
+    if (!byPos) return {};
+
+    // If it's already an object map { pos: {acc|pct, made, attempts}, ... }
+    if (!Array.isArray(byPos) && typeof byPos === "object") {
+      const out = {};
+      for (const [pos, v] of Object.entries(byPos)) {
+        const acc = v.acc ?? v.pct ?? 0;
+        out[pos] = { acc, made: Number(v.made || 0), attempts: Number(v.attempts || 0) };
+      }
+      return out;
+    }
+
+    // Else assume array [{ pos, pct|acc, made, attempts }, ...]
+    const out = {};
+    (byPos || []).forEach((z) => {
+      const acc = z.acc ?? z.pct ?? 0;
+      out[z.pos] = { acc, made: Number(z.made || 0), attempts: Number(z.attempts || 0) };
+    });
+    return out;
+  }, [byPos]);
+
 
   // ---------------- Skeleton flags ----------------
   const hasAny = rows.length > 0;
@@ -249,16 +286,13 @@ export default function Dashboard() {
                 }`}
                 title="Toggle ?slow to simulate delays (dev only)"
               >
-                <span
-                  className="inline-block w-2 h-2 rounded-full"
-                  style={{ backgroundColor: slowEnabled ? "#ca8a04" : "#9ca3af" }}
-                />
+                <Turtle size={16} strokeWidth={1.75} />
                 {slowEnabled ? "Simulate slow: ON" : "Simulate slow: OFF"}
               </button>
 
               {/* Seed */}
               <button
-                className="border rounded-lg px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
+                className="border rounded-lg px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700 inline-flex items-center gap-2"
                 title="Create random sessions for testing"
                 onClick={async () => {
                   try {
@@ -272,6 +306,7 @@ export default function Dashboard() {
                   }
                 }}
               >
+                <Sprout size={16} strokeWidth={1.75} />
                 Seed 25 sessions
               </button>
             </>
@@ -282,8 +317,9 @@ export default function Dashboard() {
 
           <button
             onClick={logout}
-            className="border rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
+            className="border rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700 inline-flex items-center gap-2"
           >
+            <LogOut size={16} strokeWidth={1.75} />
             Logout
           </button>
         </div>
@@ -314,7 +350,7 @@ export default function Dashboard() {
           filters={filters}
           setFilters={setFilters}
           kpis={kpis}
-          byPos={byPos}
+          zonesForUi={zonesForUi}
           trend={trend}
           byType={byType}
           showSkelKPIs={showSkelKPIs}
@@ -481,19 +517,21 @@ function LogSection({
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onCreate}
-          className="bg-black text-white rounded-xl px-4 py-2 text-sm md:text-base"
+          className="bg-black text-white rounded-xl px-4 py-2 text-sm md:text-base inline-flex items-center gap-2"
         >
+          <Plus size={16} strokeWidth={1.75} />
           New session
         </button>
 
         <button
           onClick={onClearAll}
           disabled={!rows.length || clearing}
-          className={`rounded-xl px-3 py-2 border text-sm md:text-base ${
+          className={`rounded-xl px-3 py-2 border text-sm md:text-base inline-flex items-center gap-2 ${
             clearing ? "opacity-60 cursor-not-allowed" : "hover:bg-red-50 dark:hover:bg-red-900/20"
           } text-red-600 dark:text-red-400 dark:border-neutral-700`}
           title="Delete ALL sessions"
         >
+          <Trash2 size={16} strokeWidth={1.75} />
           {clearing ? "Clearing…" : "Clear log"}
         </button>
 
@@ -539,8 +577,8 @@ function LogSection({
             className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-40 inline-flex items-center gap-2 dark:border-neutral-700"
             title="Export filtered rows"
           >
-            {exporting && <Spinner size={14} />}
-            Export CSV
+            <Download size={16} strokeWidth={1.75} />
+            {exporting ? "Exporting…" : "Export CSV"}
           </button>
 
           <label className="text-sm opacity-70">Rows</label>
@@ -605,10 +643,12 @@ function LogSection({
                         </div>
                       </td>
                       <td className="p-3 whitespace-nowrap">
-                        <button className="mr-2 underline" onClick={() => onEdit(r)}>
+                        <button className="mr-2 underline inline-flex items-center gap-1" onClick={() => onEdit(r)}>
+                          <Pencil size={16} strokeWidth={1.75} />
                           Edit
                         </button>
-                        <button className="underline" onClick={() => onDelete(r.id)}>
+                        <button className="underline inline-flex items-center gap-1" onClick={() => onDelete(r.id)}>
+                          <Trash2 size={16} strokeWidth={1.75} />
                           Delete
                         </button>
                       </td>
@@ -657,7 +697,7 @@ function AnalyticsSection({
   filters,
   setFilters,
   kpis,
-  byPos,
+  zonesForUi,
   trend,
   byType,
   showSkelKPIs,
@@ -705,7 +745,7 @@ function AnalyticsSection({
               </div>
             </div>
           ) : (
-            <HeatmapCourt data={byPos} layout="stack" />
+            <HeatmapCourt data={zonesForUi} layout="stack" />
           )}
         </div>
 
@@ -716,7 +756,7 @@ function AnalyticsSection({
             </div>
           ) : (
             <HeatmapCourtImage
-              data={byPos}
+              data={zonesForUi}
               src="/court.png"
               range={filters.range || "3pt"}
               direction={filters.direction}

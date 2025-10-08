@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Calendar } from "lucide-react";
 
 const TYPE_KEYS = ["spot", "catch_shoot", "off_dribble", "run_half"];
 
@@ -29,7 +29,7 @@ export default function AnalyticsFilters({ value, onChange }) {
   };
 
   const inputBase =
-    "w-full border rounded-lg px-3 py-2 text-sm md:text-base " +
+    "w-full border rounded-lg px-9 py-2 text-sm md:text-base " +
     "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 " +
     "focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-transparent " +
     "dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100 dark:placeholder:text-neutral-400 " +
@@ -54,40 +54,46 @@ export default function AnalyticsFilters({ value, onChange }) {
       {/* Quick windows */}
       <div className="flex flex-wrap gap-2">
         {[7, 30, 90].map((d) => (
-          <button
-            key={d}
-            className={pill(windowDays === d)}
-            onClick={() => quickRange(d)}
-          >
+          <button key={d} className={pill(windowDays === d)} onClick={() => quickRange(d)}>
             {d}d
           </button>
         ))}
       </div>
 
-      {/* Date range */}
+      {/* Date range with calendar icons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <input
-          type="date"
-          value={dateFrom || ""}
-          onChange={(e) => onChange({ ...value, dateFrom: e.target.value })}
-          className={inputBase}
-        />
-        <input
-          type="date"
-          value={dateTo || ""}
-          onChange={(e) => onChange({ ...value, dateTo: e.target.value })}
-          className={inputBase}
-        />
+        <div className="relative">
+          <Calendar
+            size={16}
+            strokeWidth={1.75}
+            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-60"
+          />
+          <input
+            type="date"
+            value={dateFrom || ""}
+            onChange={(e) => onChange({ ...value, dateFrom: e.target.value })}
+            className={inputBase}
+          />
+        </div>
+        <div className="relative">
+          <Calendar
+            size={16}
+            strokeWidth={1.75}
+            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-60"
+          />
+          <input
+            type="date"
+            value={dateTo || ""}
+            onChange={(e) => onChange({ ...value, dateTo: e.target.value })}
+            className={inputBase}
+          />
+        </div>
       </div>
 
       {/* Type pills */}
       <div className="flex flex-wrap gap-2">
         {TYPE_KEYS.map((t) => (
-          <button
-            key={t}
-            onClick={() => toggleType(t)}
-            className={pill(isTypeOn(t))}
-          >
+          <button key={t} onClick={() => toggleType(t)} className={pill(isTypeOn(t))}>
             {labelOfType(t)}
           </button>
         ))}
