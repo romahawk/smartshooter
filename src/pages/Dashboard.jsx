@@ -31,25 +31,16 @@ import AttemptsVsMadeByType from "../components/charts/AttemptsVsMadeByType";
 import { toast } from "sonner";
 import Spinner from "../components/ui/Spinner";
 import { Skeleton } from "../components/ui/Skeleton";
-import ThemeToggle from "../components/ThemeToggle";
 
 // Icons (Lucide)
-import {
-  LogOut,
-  Turtle,
-  Sprout,
-  Plus,
-  Download,
-  Trash2,
-  Pencil,
-} from "lucide-react";
+import { Turtle, Sprout, Plus, Download, Trash2, Pencil } from "lucide-react";
 
 // Dev helpers
 import { seedSessions } from "../dev/seedSessions";
 import { devDelay } from "../lib/devDelay";
 
 export default function Dashboard() {
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
 
   // ---------------- Data ----------------
   const [rows, setRows] = useState([]); // all sessions for the user
@@ -59,7 +50,7 @@ export default function Dashboard() {
   const [clearing, setClearing] = useState(false);
 
   // ---------------- Editor ----------------
-  const [editing, setEditing] = useState(null); // null | {id?, ...session}
+  const [editing, setEditing] = useState(null); // null | {id?, .session}
 
   // ---------------- Tabs ----------------
   const [tab, setTab] = useState("analytics"); // 'log' | 'analytics'
@@ -83,7 +74,7 @@ export default function Dashboard() {
     .slice(0, 10);
 
   const [filters, setFilters] = useState({
-    windowDays: 7,       // label for KPI tiles / quick buttons
+    windowDays: 7,         // label for KPI tiles / quick buttons
     dateFrom: sevenAgoISO, // ISO 'YYYY-MM-DD'
     dateTo: todayISO,      // ISO 'YYYY-MM-DD'
     types: [],             // [] = all
@@ -96,7 +87,7 @@ export default function Dashboard() {
     if (!user) return;
     try {
       setIsLoading(true);
-      await devDelay(900); // visible skeletons in dev with ?slow
+      if (import.meta.env.DEV && slowEnabled) await devDelay(900);
       let next = null;
       const all = [];
       do {
@@ -117,6 +108,28 @@ export default function Dashboard() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
+
+  // ---------------- Onboarding events from Navbar ----------------
+  useEffect(() => {
+    const onStart = () => setEditing(newSession(user?.uid));
+    const onSeed = async () => {
+      try {
+        const n = 25;
+        await seedSessions(user.uid, n);
+        await load();
+        toast.success(`Loaded ${n} sample sessions`);
+      } catch (e) {
+        console.error("Seed failed:", e);
+        toast.error(e?.message || "Seeding failed");
+      }
+    };
+    window.addEventListener("smarthooper:onboarding:start", onStart);
+    window.addEventListener("smarthooper:onboarding:seed", onSeed);
+    return () => {
+      window.removeEventListener("smarthooper:onboarding:start", onStart);
+      window.removeEventListener("smarthooper:onboarding:seed", onSeed);
+    };
+  }, [user?.uid]); // load captured from closure
 
   // ---------------- CRUD handlers ----------------
   const onCreateClick = () => setEditing(newSession(user.uid));
@@ -187,7 +200,7 @@ export default function Dashboard() {
   const filtered = useMemo(
     () =>
       filterSessions(rows, {
-        // ✅ analytics.js expects { from, to }
+        // analytics.js expects { from, to }
         from: filters.dateFrom,
         to: filters.dateTo,
         types: filters.types,
@@ -216,11 +229,8 @@ export default function Dashboard() {
 
   // Normalize zone data into an object expected by both heatmap components
   // { [pos]: { acc, made, attempts } }
-  // NEW — supports array OR object from aggregateByPosition
   const zonesForUi = useMemo(() => {
     if (!byPos) return {};
-
-    // If it's already an object map { pos: {acc|pct, made, attempts}, ... }
     if (!Array.isArray(byPos) && typeof byPos === "object") {
       const out = {};
       for (const [pos, v] of Object.entries(byPos)) {
@@ -229,8 +239,6 @@ export default function Dashboard() {
       }
       return out;
     }
-
-    // Else assume array [{ pos, pct|acc, made, attempts }, ...]
     const out = {};
     (byPos || []).forEach((z) => {
       const acc = z.acc ?? z.pct ?? 0;
@@ -238,7 +246,6 @@ export default function Dashboard() {
     });
     return out;
   }, [byPos]);
-
 
   // ---------------- Skeleton flags ----------------
   const hasAny = rows.length > 0;
@@ -311,17 +318,6 @@ export default function Dashboard() {
               </button>
             </>
           )}
-
-          {/* Theme toggle */}
-          <ThemeToggle />
-
-          <button
-            onClick={logout}
-            className="border rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700 inline-flex items-center gap-2"
-          >
-            <LogOut size={16} strokeWidth={1.75} />
-            Logout
-          </button>
         </div>
       </div>
 
@@ -460,7 +456,7 @@ function LogSection({
         const attempts = Number(s.totals?.attempts || 0);
         const made = Number(s.totals?.made || 0);
         const acc = attempts ? Math.round((made / attempts) * 100) : 0;
-        const notes = (s.notes || "").replace(/"/g, '""');
+        const notes = (s.notes || "").replace(/\"/g, '""');
         return [
           s.date,
           s.type,
@@ -527,76 +523,39 @@ function LogSection({
           onClick={onClearAll}
           disabled={!rows.length || clearing}
           className={`rounded-xl px-3 py-2 border text-sm md:text-base inline-flex items-center gap-2 ${
-            clearing ? "opacity-60 cursor-not-allowed" : "hover:bg-red-50 dark:hover:bg-red-900/20"
-          } text-red-600 dark:text-red-400 dark:border-neutral-700`}
-          title="Delete ALL sessions"
+            clearing ? "opacity-60 pointer-events-none" : ""
+          }`}
+          title="Delete all sessions"
         >
           <Trash2 size={16} strokeWidth={1.75} />
-          {clearing ? "Clearing…" : "Clear log"}
+          Clear all
         </button>
 
-        <select
-          value={typeFilter}
-          onChange={(e) => {
-            setTypeFilter(e.target.value);
-            setPage(0);
-          }}
-          className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
-          title="Filter by training type"
+        <button
+          disabled={!rows.length || exporting}
+          onClick={exportCsv}
+          className="rounded-xl px-3 py-2 border text-sm md:text-base inline-flex items-center gap-2"
+          title="Export as CSV"
         >
-          <option value="all">All types</option>
-          <option value="spot">spot</option>
-          <option value="catch_shoot">catch_shoot</option>
-          <option value="off_dribble">off_dribble</option>
-          <option value="run_half">run_half</option>
+          <Download size={16} strokeWidth={1.75} />
+          {exporting ? "Exporting…" : "Export CSV"}
+        </button>
+
+        <label className="text-sm opacity-70">Rows</label>
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(0);
+          }}
+          className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
+        >
+          {[10, 20, 50].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
         </select>
-
-        <input
-          type="date"
-          value={from}
-          onChange={(e) => {
-            setFrom(e.target.value);
-            setPage(0);
-          }}
-          className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
-        />
-        <input
-          type="date"
-          value={to}
-          onChange={(e) => {
-            setTo(e.target.value);
-            setPage(0);
-          }}
-          className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
-        />
-
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={exportCsv}
-            disabled={!sorted.length || exporting}
-            className="border rounded-lg px-3 py-2 text-sm md:text-base hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-40 inline-flex items-center gap-2 dark:border-neutral-700"
-            title="Export filtered rows"
-          >
-            <Download size={16} strokeWidth={1.75} />
-            {exporting ? "Exporting…" : "Export CSV"}
-          </button>
-
-          <label className="text-sm opacity-70">Rows</label>
-          <select
-            value={pageSize}
-            onChange={(e) => {
-              setPageSize(Number(e.target.value));
-              setPage(0);
-            }}
-            className="border rounded-lg p-2 text-sm md:text-base dark:bg-neutral-900 dark:border-neutral-700"
-          >
-            {[10, 20, 50].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* Table */}
