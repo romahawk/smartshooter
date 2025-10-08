@@ -1,47 +1,57 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
 
-// keep in sync with lib/theme.js
-function getStoredTheme() {
-  return localStorage.getItem("theme");
-}
-function setStoredTheme(t) {
-  localStorage.setItem("theme", t);
-}
-
+/**
+ * Theme toggle that:
+ * - Persists theme to localStorage ("light" | "dark")
+ * - Sets <html class="dark"> accordingly
+ * - Shows "Dark mode" when light is active, "Light mode" when dark is active
+ * - Ensures label is WHITE when dark mode is active (high contrast)
+ */
 export default function ThemeToggle() {
-  const [isDark, setIsDark] = useState(
-    document.documentElement.classList.contains("dark")
-  );
+  const getInitial = () => {
+    if (typeof document === "undefined") return false;
+    // Prefer persisted setting, fallback to system, then light
+    try {
+      const stored = localStorage.getItem("theme");
+      if (stored) return stored === "dark";
+    } catch {}
+    return document.documentElement.classList.contains("dark");
+  };
 
+  const [isDark, setIsDark] = useState(getInitial);
+
+  // Apply theme to <html> + persist
   useEffect(() => {
+    if (typeof document === "undefined") return;
     const root = document.documentElement;
-    if (isDark) {
-      root.classList.add("dark");
-      setStoredTheme("dark");
-    } else {
-      root.classList.remove("dark");
-      setStoredTheme("light");
-    }
+    if (isDark) root.classList.add("dark");
+    else root.classList.remove("dark");
+    try {
+      localStorage.setItem("theme", isDark ? "dark" : "light");
+    } catch {}
   }, [isDark]);
+
+  const label = isDark ? "Light mode" : "Dark mode";
 
   return (
     <button
+      type="button"
       onClick={() => setIsDark((v) => !v)}
-      className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
-      title={isDark ? "Light mode" : "Dark mode"}
+      aria-label="Toggle theme"
+      title="Toggle theme"
+      className={[
+        "inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm transition-colors",
+        // Border & background by theme
+        isDark
+          ? "border border-white/20 bg-white/5 hover:bg-white/10"
+          : "border border-black/10 bg-white/80 hover:bg-gray-50",
+        // Text color — ensure WHITE when dark mode is active (requested)
+        isDark ? "text-white" : "text-slate-700",
+      ].join(" ")}
     >
-      {isDark ? (
-        <>
-          <Sun size={16} strokeWidth={1.75} />
-          <span>Light mode</span>
-        </>
-      ) : (
-        <>
-          <Moon size={16} strokeWidth={1.75} />
-          <span>Dark mode</span>
-        </>
-      )}
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      <span>{label}</span>
     </button>
   );
 }
