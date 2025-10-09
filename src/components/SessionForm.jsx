@@ -21,6 +21,29 @@ function orderForDirection(dir) {
     : ["left_corner", "left_wing", "center", "right_wing", "right_corner"];
 }
 
+const baseField =
+  "border rounded-xl p-2 text-sm md:text-base " +
+  "bg-white text-gray-900 border-gray-300 placeholder-gray-500 " +
+  "focus:outline-none focus:ring-2 focus:ring-teal-500/50 " +
+  "dark:bg-neutral-900 dark:text-gray-100 dark:border-neutral-700 dark:placeholder-gray-400 " +
+  "disabled:opacity-70";
+
+const baseSelect =
+  "w-full border rounded-lg p-2 text-sm md:text-base " +
+  "bg-white text-gray-900 border-gray-300 " +
+  "focus:outline-none focus:ring-2 focus:ring-teal-500/50 " +
+  "dark:bg-neutral-900 dark:text-gray-100 dark:border-neutral-700";
+
+const baseLabel = "text-xs md:text-sm text-gray-700 dark:text-gray-300";
+
+const baseCard =
+  "border rounded-2xl p-3 md:p-4 space-y-3 md:space-y-4 " +
+  "border-gray-200 dark:border-neutral-700 bg-white/60 dark:bg-neutral-900/60";
+
+const baseZoneCard =
+  "border rounded-xl p-3 md:p-4 space-y-2 border-gray-200 dark:border-neutral-700 " +
+  "bg-white/60 dark:bg-neutral-900/60";
+
 export default function SessionForm({ initial, onSubmit, onCancel }) {
   const [model, setModel] = useState(normalizeInitial(initial));
 
@@ -120,22 +143,22 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
       {/* Header */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex flex-col gap-1">
-          <label className="text-xs md:text-sm opacity-70">Date</label>
+          <label className={baseLabel}>Date</label>
           <input
             type="date"
             value={model.date}
             onChange={(e) => setField("date", e.target.value)}
-            className="border rounded-xl p-2 text-sm md:text-base"
+            className={baseField}
             aria-label="Session date"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs md:text-sm opacity-70">Training type</label>
+          <label className={baseLabel}>Training type</label>
           <select
             value={model.type}
             onChange={(e) => setField("type", e.target.value)}
-            className="border rounded-xl p-2 text-sm md:text-base"
+            className={baseSelect}
             aria-label="Training type"
           >
             {TRAINING_TYPES.map((t) => (
@@ -145,12 +168,12 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
         </div>
 
         <div className="flex flex-col gap-1 lg:col-span-1 sm:col-span-2">
-          <label className="text-xs md:text-sm opacity-70">Notes</label>
+          <label className={baseLabel}>Notes</label>
           <input
             placeholder="Optional notes"
             value={model.notes}
             onChange={(e) => setField("notes", e.target.value)}
-            className="border rounded-xl p-2 text-sm md:text-base"
+            className={baseField}
             aria-label="Notes"
           />
         </div>
@@ -158,16 +181,18 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
 
       {/* Rounds */}
       {model.rounds.map((r, i) => (
-        <div key={i} className="border rounded-2xl p-3 md:p-4 space-y-3 md:space-y-4">
+        <div key={i} className={baseCard}>
           {/* Round header controls */}
           <div className="grid gap-2 sm:gap-3 grid-cols-2 md:grid-cols-5 items-center">
             <div className="col-span-2 md:col-span-1 flex items-center">
-              <span className="font-medium text-sm md:text-base">Round {i + 1}</span>
+              <span className="font-medium text-sm md:text-base text-gray-900 dark:text-gray-100">
+                Round {i + 1}
+              </span>
             </div>
 
             {/* Direction */}
             <div className="col-span-1">
-              <label className="block text-xs opacity-70 mb-1">Direction</label>
+              <label className={`${baseLabel} mb-1 block`}>Direction</label>
               <select
                 value={r.direction}
                 onChange={(e) => {
@@ -178,7 +203,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
                     return { ...m, rounds };
                   });
                 }}
-                className="w-full border rounded-lg p-2 text-sm md:text-base"
+                className={baseSelect}
                 aria-label="Direction"
               >
                 {DIRECTIONS.map((d) => (
@@ -189,11 +214,11 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
 
             {/* Range */}
             <div className="col-span-1">
-              <label className="block text-xs opacity-70 mb-1">Range</label>
+              <label className={`${baseLabel} mb-1 block`}>Range</label>
               <select
                 value={r.range}
                 onChange={(e) => onChangeRoundRange(i, e.target.value)}
-                className="w-full border rounded-lg p-2 text-sm md:text-base"
+                className={baseSelect}
                 aria-label="Range"
               >
                 {RANGE_TYPES.map((rt) => (
@@ -206,11 +231,11 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
 
             {/* shots/zone */}
             <div className="col-span-1">
-              <label className="block text-xs opacity-70 mb-1">Shots per zone</label>
+              <label className={`${baseLabel} mb-1 block`}>Shots per zone</label>
               <select
                 value={r.shotsPerZone ?? 10}
                 onChange={(e) => onChangeShotsPerZone(i, e.target.value)}
-                className="w-full border rounded-lg p-2 text-sm md:text-base"
+                className={baseSelect}
                 aria-label="Shots per zone"
               >
                 {[5, 10, 20].map((n) => (
@@ -225,7 +250,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
               <button
                 type="button"
                 onClick={() => removeRound(i)}
-                className="text-sm border rounded-lg px-2 py-2 hover:bg-gray-50 w-full md:w-auto"
+                className="text-sm border rounded-lg px-2 py-2 w-full md:w-auto border-gray-300 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-900 dark:text-gray-100"
               >
                 Remove
               </button>
@@ -244,10 +269,10 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
                 };
               const attempts = Number(r.shotsPerZone ?? z.attempts ?? 0);
               return (
-                <div key={pos} className="border rounded-xl p-3 md:p-4 space-y-2">
-                  <div className="text-sm md:text-base font-medium">
+                <div key={pos} className={baseZoneCard}>
+                  <div className="text-sm md:text-base font-medium text-gray-900 dark:text-gray-100">
                     {pretty[pos]}{" "}
-                    <span className="text-xs md:text-sm text-gray-500">
+                    <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                       ({r.range} • {attempts})
                     </span>
                   </div>
@@ -255,13 +280,13 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
                   <div className="grid grid-cols-2 gap-2">
                     {/* Made */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs opacity-70">Made</label>
+                      <label className={baseLabel}>Made</label>
                       <input
                         type="number"
                         min="0"
                         max={attempts}
                         inputMode="numeric"
-                        className="w-full border rounded p-2 text-sm md:text-base"
+                        className={baseField}
                         value={z.made ?? 0}
                         onChange={(e) => {
                           const n = Number(e.target.value);
@@ -274,10 +299,13 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
 
                     {/* Attempts (read-only) */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs opacity-70">Attempts</label>
+                      <label className={baseLabel}>Attempts</label>
                       <input
                         type="number"
-                        className="w-full border rounded p-2 bg-gray-50 text-sm md:text-base"
+                        className={
+                          baseField +
+                          " bg-gray-50 dark:bg-neutral-800 cursor-not-allowed"
+                        }
                         value={attempts}
                         readOnly
                         tabIndex={-1}
@@ -297,7 +325,7 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
         <button
           type="button"
           onClick={addRound}
-          className="border rounded-xl px-3 py-2 text-sm md:text-base"
+          className="border rounded-xl px-3 py-2 text-sm md:text-base border-gray-300 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-900 dark:text-gray-100"
         >
           + Add round
         </button>
@@ -305,14 +333,14 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
           <button
             type="button"
             onClick={onCancel}
-            className="border rounded-xl px-3 py-2 text-sm md:text-base"
+            className="border rounded-xl px-3 py-2 text-sm md:text-base border-gray-300 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-900 dark:text-gray-100"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={submit}
-            className="bg-black text-white rounded-xl px-4 py-2 text-sm md:text-base"
+            className="bg-black text-white dark:bg-white dark:text-black rounded-xl px-4 py-2 text-sm md:text-base"
           >
             Save session
           </button>

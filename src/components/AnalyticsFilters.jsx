@@ -2,6 +2,15 @@ import { Calendar } from "lucide-react";
 
 const TYPE_KEYS = ["spot", "catch_shoot", "off_dribble", "run_half"];
 
+// Canonicalize direction to the stored form (unicode arrows)
+function normDir(d) {
+  if (!d) return undefined;
+  const t = String(d).trim();
+  if (t === "all") return undefined;
+  if (t === "static") return "static";
+  return t.replace("->", "→"); // L->R => L→R, R->L => R→L
+}
+
 export default function AnalyticsFilters({ value, onChange }) {
   const { windowDays = 7, dateFrom, dateTo, types = [], direction, range } = value;
 
@@ -42,12 +51,18 @@ export default function AnalyticsFilters({ value, onChange }) {
     "dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100 dark:focus:ring-white/10";
 
   const pill = (active) =>
-    `rounded-lg px-3 py-2 text-sm border transition-colors ${
-      active
-        ? "bg-black text-white border-black dark:bg-neutral-100 dark:text-black dark:border-neutral-100"
-        : "bg-transparent hover:bg-gray-50 border-gray-200 text-gray-800 " +
-          "dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
-    }`;
+  `rounded-lg px-3 py-2 text-sm border transition-colors ${
+    active
+      // Light mode → dark orange; Dark mode → current neutral scheme
+      ? "bg-orange-600 text-white border-orange-600 hover:bg-orange-700 " +
+        "dark:bg-neutral-100 dark:text-black dark:border-neutral-100 dark:hover:bg-neutral-200"
+      : "bg-transparent hover:bg-gray-50 border-gray-200 text-gray-800 " +
+        "dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
+  }`;
+
+
+  // Ensure the dropdown reflects canonical values even if old ASCII was in state
+  const directionValue = normDir(direction) || "all";
 
   return (
     <div className="space-y-3">
@@ -63,11 +78,7 @@ export default function AnalyticsFilters({ value, onChange }) {
       {/* Date range with calendar icons */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="relative">
-          <Calendar
-            size={16}
-            strokeWidth={1.75}
-            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-60"
-          />
+          <Calendar size={16} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-60" />
           <input
             type="date"
             value={dateFrom || ""}
@@ -76,11 +87,7 @@ export default function AnalyticsFilters({ value, onChange }) {
           />
         </div>
         <div className="relative">
-          <Calendar
-            size={16}
-            strokeWidth={1.75}
-            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-60"
-          />
+          <Calendar size={16} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-60" />
           <input
             type="date"
             value={dateTo || ""}
@@ -103,18 +110,14 @@ export default function AnalyticsFilters({ value, onChange }) {
       <div className="flex flex-wrap gap-2">
         <select
           className={selectBase}
-          value={direction || "all"}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              direction: e.target.value === "all" ? undefined : e.target.value,
-            })
-          }
+          value={directionValue}
+          onChange={(e) => onChange({ ...value, direction: normDir(e.target.value) })}
         >
           <option value="all">All directions</option>
           <option value="static">static</option>
-          <option value="L->R">L→R</option>
-          <option value="R->L">R→L</option>
+          {/* Use canonical unicode-arrow values */}
+          <option value="L→R">L→R</option>
+          <option value="R→L">R→L</option>
         </select>
 
         <select
