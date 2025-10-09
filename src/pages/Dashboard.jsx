@@ -67,6 +67,8 @@ export default function Dashboard() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  const normalizeDir = (d) => (d ? String(d).replace("->", "→") : undefined);
+
   // ---------------- Analytics filters (DEFAULT = last 7 days) ----------------
   const todayISO = new Date().toISOString().slice(0, 10);
   const sevenAgoISO = new Date(Date.now() - 7 * 86400000)
@@ -200,7 +202,6 @@ export default function Dashboard() {
   const filtered = useMemo(
     () =>
       filterSessions(rows, {
-        // analytics.js expects { from, to }
         from: filters.dateFrom,
         to: filters.dateTo,
         types: filters.types,
@@ -209,23 +210,14 @@ export default function Dashboard() {
   );
 
   const aggOpts = useMemo(
-    () => ({ direction: filters.direction, range: filters.range }),
+    () => ({ direction: normalizeDir(filters.direction), range: filters.range }),
     [filters.direction, filters.range]
   );
 
   const kpis = useMemo(() => computeKpis(filtered, aggOpts), [filtered, aggOpts]);
-  const byPos = useMemo(
-    () => aggregateByPosition(filtered, aggOpts),
-    [filtered, aggOpts]
-  );
-  const trend = useMemo(
-    () => aggregateAccuracyByDate(filtered, aggOpts),
-    [filtered, aggOpts]
-  );
-  const byType = useMemo(
-    () => aggregateByType(filtered, aggOpts),
-    [filtered, aggOpts]
-  );
+  const byPos = useMemo(() => aggregateByPosition(filtered, aggOpts), [filtered, aggOpts]);
+  const trend = useMemo(() => aggregateAccuracyByDate(filtered, aggOpts), [filtered, aggOpts]);
+  const byType = useMemo(() => aggregateByType(filtered, aggOpts), [filtered, aggOpts]);
 
   // Normalize zone data into an object expected by both heatmap components
   // { [pos]: { acc, made, attempts } }

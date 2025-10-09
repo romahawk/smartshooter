@@ -2,7 +2,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Sparkles, LogOut, LifeBuoy } from "lucide-react"; // 👈 re-add LifeBuoy
+import { Icon } from "@iconify/react";
+import { Sparkles, LogOut, LifeBuoy } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -28,7 +29,9 @@ export default function Navbar() {
     const { body } = document;
     const prev = body.style.overflow;
     if (open) body.style.overflow = "hidden";
-    return () => { body.style.overflow = prev; };
+    return () => {
+      body.style.overflow = prev;
+    };
   }, [open]);
 
   const startOnboarding = () => {
@@ -41,68 +44,101 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 backdrop-blur-md bg-white/75 dark:bg-neutral-900/80 border-b border-orange-300/60 dark:border-orange-400/40 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
-      <div className="mx-auto max-w-7xl h-14 px-3 md:px-6 flex items-center justify-between">
+    <header
+      className="
+        sticky top-0 z-40 backdrop-blur-md
+        border-b shadow-[0_2px_10px_rgba(0,0,0,0.15)]
+        bg-white/90 border-orange-300/50
+        dark:bg-gradient-to-b dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900
+        dark:border-orange-500/40
+      "
+    >
+      <div className="mx-auto max-w-7xl h-14 px-3 md:px-6 flex items-center justify-between gap-4">
         {/* Brand */}
-        <Link to="/" className="flex items-center gap-2" aria-label="SmartShooter">
-          <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">SmartShooter</span>
-          <span className="hidden sm:inline-block h-5 w-px bg-orange-500/30" />
-          <span className="hidden sm:inline text-xs text-orange-700/80 dark:text-orange-300/90">analytics</span>
+        <Link to="/" className="flex items-center gap-2 group" aria-label="SmartShooter">
+          <Icon
+            icon="tabler:ball-basketball"
+            className="h-5 w-5 text-orange-600 dark:text-orange-500 transition-transform group-hover:scale-110"
+          />
+          <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            Smart<span className="text-orange-600 dark:text-orange-400">Shooter</span>
+          </span>
+          <span className="hidden sm:inline-block h-5 w-px bg-orange-500/30 ml-1" />
+          <span className="hidden sm:inline text-xs text-orange-700/80 dark:text-orange-300/90">
+            analytics
+          </span>
         </Link>
 
         {/* Right actions */}
-        <nav className="ml-auto flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setOpen(true)}
             title="Onboarding (Shift+O)"
-            className="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 bg-orange-200/90 dark:bg-orange-300/90 text-slate-900 hover:bg-orange-200 active:bg-orange-300 px-3 py-1.5 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
+            className="
+              inline-flex items-center gap-2 rounded-xl
+              border border-black/10 dark:border-white/10
+              bg-orange-200/90 text-slate-900 hover:bg-orange-200 active:bg-orange-300
+              dark:bg-orange-300/90 dark:text-black
+              px-3 py-1.5 text-sm font-medium shadow-sm transition-colors
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60
+            "
           >
             <Sparkles className="h-4 w-4" />
             <span className="hidden sm:inline">Onboarding</span>
           </button>
 
-          {/* 👇 Help button goes to the new /help page */}
           <Link
             to="/help"
             title="Help & tips"
-            className="hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+            className="
+              hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm
+              text-slate-700 hover:text-orange-700
+              dark:text-slate-300 dark:hover:text-orange-300
+              transition-colors
+            "
           >
             <LifeBuoy className="h-4 w-4" />
             <span className="hidden lg:inline">Help</span>
           </Link>
 
-          {/* Theme toggle (white 'Light mode' label in dark mode) */}
           <ThemeToggle />
 
           <button
             onClick={logout}
-            className="inline-flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-neutral-800 text-slate-700 dark:text-slate-200"
+            className="
+              inline-flex items-center gap-2 rounded-xl
+              border border-black/10 dark:border-white/10
+              px-3 py-1.5 text-sm
+              hover:bg-gray-50 dark:hover:bg-neutral-800
+              text-slate-700 dark:text-slate-200
+              transition-colors
+            "
           >
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Logout</span>
           </button>
-        </nav>
+        </div>
       </div>
 
-      {/* Modal rendered via portal so it isn't clipped by the sticky header */}
-      {open && createPortal(
-        <OnboardingModal
-          onClose={() => setOpen(false)}
-          onStart={startOnboarding}
-          onSeed={loadSampleData}
-        />,
-        document.body
-      )}
+      {/* Onboarding modal via portal */}
+      {open &&
+        createPortal(
+          <OnboardingModal
+            onClose={() => setOpen(false)}
+            onStart={startOnboarding}
+            onSeed={loadSampleData}
+          />,
+          document.body
+        )}
     </header>
   );
 }
 
-/* ---------- Onboarding Modal (portal content) ---------- */
+/* ---------- Onboarding Modal ---------- */
 function OnboardingModal({ onClose, onStart, onSeed }) {
   const panelRef = useRef(null);
 
-  // Focus the dialog when it opens
   useEffect(() => {
     const prev = document.activeElement;
     panelRef.current?.focus();
@@ -116,7 +152,12 @@ function OnboardingModal({ onClose, onStart, onSeed }) {
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="w-full max-w-lg rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-xl p-5 outline-none max-h-[min(92dvh,600px)] overflow-auto"
+          className="
+            w-full max-w-lg rounded-2xl
+            border border-black/10 dark:border-white/10
+            bg-white dark:bg-neutral-900 shadow-xl p-5 outline-none
+            max-h-[min(92dvh,600px)] overflow-auto
+          "
         >
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-5 w-5 text-orange-600 dark:text-orange-300" />
@@ -126,15 +167,27 @@ function OnboardingModal({ onClose, onStart, onSeed }) {
           </div>
 
           <ol className="list-decimal ml-5 mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-            <li><b>Create your first session</b> — pick a training type, zone(s), rounds, and notes.</li>
-            <li><b>Track accuracy</b> — mark made/attempts per round to build your heatmaps.</li>
-            <li><b>Explore analytics</b> — check the Court & Zones heatmaps and Trends to find focus areas.</li>
+            <li>
+              <b>Create your first session</b> — pick a training type, zone(s), rounds, and notes.
+            </li>
+            <li>
+              <b>Track accuracy</b> — mark made/attempts per round to build your heatmaps.
+            </li>
+            <li>
+              <b>Explore analytics</b> — check the Court & Zones heatmaps and Trends to find focus
+              areas.
+            </li>
           </ol>
 
           <div className="mt-5 flex flex-col sm:flex-row gap-2">
             <button
               onClick={onStart}
-              className="inline-flex justify-center items-center gap-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 text-sm font-medium shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
+              className="
+                inline-flex justify-center items-center gap-2 rounded-xl
+                bg-orange-600 hover:bg-orange-700 text-white
+                px-4 py-2 text-sm font-medium shadow-sm
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60
+              "
             >
               <Sparkles className="h-4 w-4" />
               Start onboarding
@@ -142,14 +195,25 @@ function OnboardingModal({ onClose, onStart, onSeed }) {
 
             <button
               onClick={onSeed}
-              className="inline-flex justify-center items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 bg-orange-100 text-slate-900 dark:bg-orange-200 px-4 py-2 text-sm font-medium hover:bg-orange-200/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
+              className="
+                inline-flex justify-center items-center gap-2 rounded-xl
+                border border-black/10 dark:border-white/10
+                bg-orange-100 text-slate-900 dark:bg-orange-200
+                px-4 py-2 text-sm font-medium hover:bg-orange-200/80
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60
+              "
             >
               Load sample data
             </button>
 
             <button
               onClick={onClose}
-              className="ml-auto inline-flex justify-center items-center rounded-xl border border-transparent px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white"
+              className="
+                ml-auto inline-flex justify-center items-center rounded-xl
+                border border-transparent px-3 py-2 text-sm
+                text-slate-600 hover:text-slate-800
+                dark:text-slate-300 dark:hover:text-white
+              "
             >
               Cancel
             </button>
