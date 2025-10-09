@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Sparkles, LifeBuoy, LogOut } from "lucide-react";
+import { Sparkles, LogOut, LifeBuoy } from "lucide-react"; // 👈 re-add LifeBuoy
 import ThemeToggle from "./ThemeToggle";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -62,15 +62,17 @@ export default function Navbar() {
             <span className="hidden sm:inline">Onboarding</span>
           </button>
 
+          {/* 👇 Help button goes to the new /help page */}
           <Link
             to="/help"
-            title="Help & docs"
+            title="Help & tips"
             className="hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
           >
             <LifeBuoy className="h-4 w-4" />
             <span className="hidden lg:inline">Help</span>
           </Link>
 
+          {/* Theme toggle (white 'Light mode' label in dark mode) */}
           <ThemeToggle />
 
           <button
@@ -83,7 +85,7 @@ export default function Navbar() {
         </nav>
       </div>
 
-      {/* 🔒 Render modal via a PORTAL so it's not constrained by the header */}
+      {/* Modal rendered via portal so it isn't clipped by the sticky header */}
       {open && createPortal(
         <OnboardingModal
           onClose={() => setOpen(false)}
@@ -108,18 +110,13 @@ function OnboardingModal({ onClose, onStart, onSeed }) {
   }, []);
 
   return (
-    // Full-viewport overlay above everything
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-[60]">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Center the panel; ensure it fully fits on any screen without cutting off the top */}
       <div className="relative h-full w-full grid place-items-center p-4 sm:p-6">
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="w-full max-w-lg rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-xl p-5 outline-none
-                     max-h-[min(92dvh,600px)] overflow-auto"
+          className="w-full max-w-lg rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-xl p-5 outline-none max-h-[min(92dvh,600px)] overflow-auto"
         >
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-5 w-5 text-orange-600 dark:text-orange-300" />
@@ -146,7 +143,6 @@ function OnboardingModal({ onClose, onStart, onSeed }) {
             <button
               onClick={onSeed}
               className="inline-flex justify-center items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 bg-orange-100 text-slate-900 dark:bg-orange-200 px-4 py-2 text-sm font-medium hover:bg-orange-200/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
-              title="Load demo data to explore charts immediately"
             >
               Load sample data
             </button>
