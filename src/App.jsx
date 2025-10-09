@@ -1,12 +1,13 @@
+// src/App.jsx
 import { useEffect } from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Help from "./pages/Help";            // 👈 add this
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuthStore } from "./store/useAuthStore";
 import Navbar from "./components/Navbar";
 
-/** Layout that shows the global Navbar for authenticated pages */
 function AppShell() {
   return (
     <>
@@ -28,10 +29,8 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Public */}
       <Route path="/login" element={<Login />} />
 
-      {/* Protected layout + routes */}
       <Route
         element={
           <ProtectedRoute>
@@ -40,10 +39,10 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/help" element={<Help />} />    {/* 👈 new route */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Route>
 
-      {/* Fallbacks */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
