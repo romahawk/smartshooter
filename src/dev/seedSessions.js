@@ -1,5 +1,6 @@
 // src/dev/seedSessions.js
 import { createSession } from "../lib/sessionApi";
+import { calculateSessionXP } from "../utils/xpCalculator"; // ← add XP
 
 const TYPES = ["spot", "catch_shoot", "off_dribble", "run_half"];
 const RANGES = ["3pt", "midrange", "paint"];
@@ -43,11 +44,21 @@ function calcTotals(rounds) {
   return { made, attempts, accuracy: attempts ? Math.round((made / attempts) * 100) : 0 };
 }
 
+// Normalize seed type names to XP calculator keys
+function normalizeTrainingType(t) {
+  if (!t) return "spot";
+  const key = String(t).toLowerCase();
+  if (key === "catch_shoot") return "catch_n_shoot";
+  if (key === "run_half") return "run_half_court";
+  return key; // 'spot' | 'off_dribble' | already normalized
+}
+
 /**
  * Seed N sessions for a user.
  * - Spreads dates over the last ~60 days
  * - Adds 1–3 rounds per session
  * - Ensures userId is set (passes your Firestore rules)
+ * - NOW includes xpEarned based on totals + type
  */
 export async function seedSessions(uid, n = 25) {
   const today = new Date();
@@ -59,14 +70,24 @@ export async function seedSessions(uid, n = 25) {
     const roundsCount = rint(1, 3);
     const rounds = Array.from({ length: roundsCount }, makeRound);
     const totals = calcTotals(rounds);
+    const type = rpick(TYPES);
+
+    // ---- XP ----
+    const trainingType = normalizeTrainingType(type);
+    const { xp } = calculateSessionXP({
+      attempts: totals.attempts,
+      made: totals.made,
+      trainingType,
+    });
 
     const payload = {
       userId: uid,
       date: fmt(d),
-      type: rpick(TYPES),
+      type,
       notes: "",
       rounds,
-      totals, // helpful for table accuracy/volume
+      totals,
+      xpEarned: xp, // ← write per-session XP
       createdAt: new Date().toISOString(),
     };
 

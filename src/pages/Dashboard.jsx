@@ -39,11 +39,20 @@ import { Turtle, Sprout, Plus, Download, Trash2, Pencil } from "lucide-react";
 import { seedSessions } from "../dev/seedSessions";
 import { devDelay } from "../lib/devDelay";
 
+// [XP] NEW imports
+import XPProgressBar from "../components/XPProgressBar";
+import LevelUpToast from "../components/LevelUpToast";
+import { calculateSessionXP } from "../utils/xpCalculator";
+import { getLevelFromXP } from "../config/levels";
+
 export default function Dashboard() {
   const { user } = useAuthStore();
 
   // ---------------- Data ----------------
   const [rows, setRows] = useState([]); // all sessions for the user
+
+  // [XP] Level-up UI flag
+  const [levelUp, setLevelUp] = useState(null); // number | null
 
   // ---------------- Loading ----------------
   const [isLoading, setIsLoading] = useState(false);
@@ -180,18 +189,65 @@ export default function Dashboard() {
     }
   };
 
+  // [XP] total XP from saved sessions (backward-compatible if old rows miss xpEarned)
+  const totalXP = useMemo(() => {
+    return rows.reduce((sum, r) => {
+      // if xp already present, trust it
+      if (r?.xpEarned != null) return sum + Number(r.xpEarned || 0);
+
+      // fallback: compute on the fly (handles old data & API mapping issues)
+      const attempts = Number(r?.totals?.attempts || 0);
+      const made = Number(r?.totals?.made || 0);
+      const trainingType = String(r?.type || "spot").toLowerCase().replaceAll(" ", "_");
+      const { xp } = calculateSessionXP({ attempts, made, trainingType });
+      return sum + xp;
+    }, 0);
+  }, [rows]);
+  
+  const currentLevel = useMemo(() => getLevelFromXP(totalXP), [totalXP]);
+
   const onSave = async (data) => {
     try {
       const payload = { ...data, userId: user.uid };
+
+      // [XP] compute XP for this session from totals + type
+      const attempts = Number(payload?.totals?.attempts || 0);
+      const made = Number(payload?.totals?.made || 0);
+
+      // map your form "type" to a trainingType used in calculator
+      const trainingType = (payload?.type || "spot")
+        .toLowerCase()
+        .replaceAll(" ", "_"); // 'off_dribble', 'catch_n_shoot', etc.
+
+      const { xp, breakdown } = calculateSessionXP({
+        attempts,
+        made,
+        trainingType,
+      });
+
+      // attach xpEarned to session record
+      payload.xpEarned = xp;
+
+      const prevLevel = currentLevel; // before save
+
       if (editing?.id) {
         await updateSession(editing.id, payload);
-        toast.success("Session updated");
+        toast.success(`Session updated • +${xp} XP`);
       } else {
         await createSession(payload);
-        toast.success("Session created");
+        toast.success(`Session created • +${xp} XP`);
       }
+
       setEditing(null);
+
+      // reload -> recompute totalXP/level
       await load();
+
+      // detect level-up after new total is loaded
+      const afterLevel = getLevelFromXP(
+        rows.reduce((a, r) => a + Number(r?.xpEarned || 0), 0) + xp
+      );
+      if (afterLevel > prevLevel) setLevelUp(afterLevel);
     } catch (e) {
       console.error("Save failed:", e);
       toast.error(e?.message || "Failed to save session");
@@ -219,8 +275,6 @@ export default function Dashboard() {
   const trend = useMemo(() => aggregateAccuracyByDate(filtered, aggOpts), [filtered, aggOpts]);
   const byType = useMemo(() => aggregateByType(filtered, aggOpts), [filtered, aggOpts]);
 
-  // Normalize zone data into an object expected by both heatmap components
-  // { [pos]: { acc, made, attempts } }
   const zonesForUi = useMemo(() => {
     if (!byPos) return {};
     if (!Array.isArray(byPos) && typeof byPos === "object") {
@@ -239,7 +293,6 @@ export default function Dashboard() {
     return out;
   }, [byPos]);
 
-  // ---------------- Skeleton flags ----------------
   const hasAny = rows.length > 0;
   const showSkelKPIs = isLoading && !hasAny;
   const showSkelHeat = isLoading && !hasAny;
@@ -253,6 +306,12 @@ export default function Dashboard() {
         <h1 className="text-lg md:text-xl font-medium">
           Welcome, {user?.email}
         </h1>
+
+        {/* [XP] progress */}
+        <div className="min-w-[260px] w-full md:w-[360px]">
+          <XPProgressBar totalXP={totalXP} />
+        </div>
+
         <div className="flex items-center gap-2">
           {import.meta.env.DEV && (
             <>
@@ -363,6 +422,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* [XP] Level-up toast */}
+      {levelUp && <LevelUpToast level={levelUp} onClose={() => setLevelUp(null)} />}
     </div>
   );
 }
