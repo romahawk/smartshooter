@@ -8,7 +8,7 @@ import {
   pretty,
   normalizeInitial,
 } from "../lib/models";
-import { toast } from "sonner"; // ✅ toasts for validation
+import { toast } from "sonner"; // toasts for validation
 
 function orderForDirection(dir) {
   const isRTL =
@@ -52,9 +52,14 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
   const setZone = (rIdx, pos, patch) =>
     setModel((m) => {
       const rounds = [...m.rounds];
-      const zones = rounds[rIdx].zones.map((z) =>
-        z.position === pos ? { ...z, ...patch } : z
-      );
+      const zones = rounds[rIdx].zones.map((z) => {
+        if (z.position !== pos) return z;
+        const next = { ...z, ...patch };
+        // clamp: made ≤ attempts, no negatives
+        const att = Math.max(0, Number(next.attempts ?? 0));
+        const made = Math.max(0, Math.min(Number(next.made ?? 0), att));
+        return { ...next, attempts: att, made };
+      });
       rounds[rIdx] = { ...rounds[rIdx], zones };
       return { ...m, rounds };
     });
@@ -81,9 +86,10 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
       return { ...m, rounds };
     });
 
-  const onChangeShotsPerZone = (i, val) =>
+  // NEW: bulk fill attempts for all zones in a round (you can edit per-zone after)
+  const onBulkAttempts = (i, val) =>
     setModel((m) => {
-      const n = Number(val);
+      const n = Math.max(0, Number(val) || 0);
       const rounds = [...m.rounds];
       const zones = rounds[i].zones.map((z) => ({
         ...z,
@@ -95,29 +101,42 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
     });
 
   const validate = () => {
-    const attempts = sum(model, "attempts");
-    const made = sum(model, "made");
-    if (made > attempts) return "Made cannot exceed attempts.";
-    if (!model.rounds.some((r) => Number(r.shotsPerZone || 0) > 0))
-      return "Add at least one shot.";
+    const totalAttempts = sum(model, "attempts");
+    const totalMade = sum(model, "made");
+    if (totalAttempts === 0)
+      return "Enter attempts for at least one zone in any round.";
+    if (totalMade > totalAttempts) return "Made cannot exceed attempts.";
+    // per-zone clamp is enforced during edits, but double-check:
+    for (const r of model.rounds) {
+      for (const z of r.zones) {
+        if (Number(z.made || 0) > Number(z.attempts || 0)) {
+          return "Some zones have 'made' greater than 'attempts'.";
+        }
+      }
+    }
     return null;
   };
 
   const submit = () => {
     const err = validate();
     if (err) {
-      toast.error(err); // ✅ surface validation via toast
+      toast.error(err);
       return;
     }
 
+    // Normalize: keep per-zone attempts as edited; clamp again defensively.
     const normalizedRounds = model.rounds.map((r) => ({
       ...r,
-      zones: r.zones.map((z) => ({
-        ...z,
-        range: r.range,
-        attempts: r.shotsPerZone,
-        made: Math.min(Number(z.made || 0), Number(r.shotsPerZone || 0)),
-      })),
+      zones: r.zones.map((z) => {
+        const att = Math.max(0, Number(z.attempts || 0));
+        const made = Math.max(0, Math.min(Number(z.made || 0), att));
+        return {
+          ...z,
+          range: r.range,
+          attempts: att,
+          made,
+        };
+      }),
     }));
 
     const attempts = normalizedRounds
@@ -229,21 +248,20 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
               </select>
             </div>
 
-            {/* shots/zone */}
+            {/* Bulk attempts */}
             <div className="col-span-1">
-              <label className={`${baseLabel} mb-1 block`}>Shots per zone</label>
-              <select
-                value={r.shotsPerZone ?? 10}
-                onChange={(e) => onChangeShotsPerZone(i, e.target.value)}
-                className={baseSelect}
-                aria-label="Shots per zone"
-              >
-                {[5, 10, 20].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
+              <label className={`${baseLabel} mb-1 block`}>
+                Bulk attempts (fill all zones)
+              </label>
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                value={Number(r.shotsPerZone ?? 10)}
+                onChange={(e) => onBulkAttempts(i, e.target.value)}
+                className={baseField}
+                aria-label="Bulk attempts"
+              />
             </div>
 
             <div className="col-span-1 md:col-span-1 flex justify-end items-end">
@@ -265,9 +283,9 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
                   position: pos,
                   range: r.range,
                   made: 0,
-                  attempts: r.shotsPerZone ?? 10,
+                  attempts: r.shotsPerZone ?? 0,
                 };
-              const attempts = Number(r.shotsPerZone ?? z.attempts ?? 0);
+              const attempts = Number(z.attempts ?? 0);
               return (
                 <div key={pos} className={baseZoneCard}>
                   <div className="text-sm md:text-base font-medium text-gray-900 dark:text-gray-100">
@@ -284,35 +302,45 @@ export default function SessionForm({ initial, onSubmit, onCancel }) {
                       <input
                         type="number"
                         min="0"
-                        max={attempts}
+                        max={Math.max(0, attempts)}
                         inputMode="numeric"
                         className={baseField}
                         value={z.made ?? 0}
                         onChange={(e) => {
                           const n = Number(e.target.value);
-                          const clamped = Math.min(Math.max(0, n), attempts);
+                          const clamped = Math.max(
+                            0,
+                            Math.min(n, Math.max(0, attempts))
+                          );
                           setZone(i, pos, { made: clamped });
                         }}
                         aria-label={`${pretty[pos]} made`}
                       />
                     </div>
 
-                    {/* Attempts (read-only) */}
+                    {/* Attempts (editable now) */}
                     <div className="flex flex-col gap-1">
                       <label className={baseLabel}>Attempts</label>
                       <input
                         type="number"
-                        className={
-                          baseField +
-                          " bg-gray-50 dark:bg-neutral-800 cursor-not-allowed"
-                        }
+                        min="0"
+                        inputMode="numeric"
+                        className={baseField}
                         value={attempts}
-                        readOnly
-                        tabIndex={-1}
+                        onChange={(e) => {
+                          const n = Math.max(0, Number(e.target.value) || 0);
+                          setZone(i, pos, { attempts: n });
+                        }}
                         aria-label={`${pretty[pos]} attempts`}
                       />
                     </div>
                   </div>
+
+                  {attempts === 0 && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Zone inactive (0 attempts)
+                    </p>
+                  )}
                 </div>
               );
             })}
