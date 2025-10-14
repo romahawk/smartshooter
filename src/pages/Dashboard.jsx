@@ -1,5 +1,6 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom"; // ← added
 import { useAuthStore } from "../store/useAuthStore";
 import SessionForm from "../components/SessionForm";
 
@@ -33,7 +34,7 @@ import Spinner from "../components/ui/Spinner";
 import { Skeleton } from "../components/ui/Skeleton";
 
 // Icons (Lucide)
-import { Turtle, Sprout, Plus, Download, Trash2, Pencil } from "lucide-react";
+import { Turtle, Sprout, Plus, Download, Trash2, Pencil, HelpCircle } from "lucide-react"; // ← HelpCircle added
 
 // Dev helpers
 import { seedSessions } from "../dev/seedSessions";
@@ -44,6 +45,7 @@ import XPProgressBar from "../components/XPProgressBar";
 import LevelUpToast from "../components/LevelUpToast";
 import { calculateSessionXP } from "../utils/xpCalculator";
 import { getLevelFromXP } from "../config/levels";
+
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -219,7 +221,7 @@ export default function Dashboard() {
         .toLowerCase()
         .replaceAll(" ", "_"); // 'off_dribble', 'catch_n_shoot', etc.
 
-      const { xp, breakdown } = calculateSessionXP({
+      const { xp } = calculateSessionXP({
         attempts,
         made,
         trainingType,
@@ -313,6 +315,23 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* 🆕 Mobile-only Help & Tips entry */}
+          <div className="md:hidden">
+            <Link
+              to="/help"
+              className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm
+                         border border-black/10 dark:border-white/15
+                         bg-white hover:bg-gray-50
+                         dark:bg-neutral-800/80 dark:hover:bg-neutral-700
+                         text-slate-700 dark:text-white"
+              aria-label="Open Help & Tips"
+              title="Help & Tips"
+            >
+              <HelpCircle className="h-4 w-4" />
+              Help & Tips
+            </Link>
+          </div>
+
           {import.meta.env.DEV && (
             <>
               {/* Simulate slow */}
