@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Sparkles, Keyboard, Bug, PlayCircle, Info, ChevronDown, ChevronRight,
-  HelpCircle, BookOpen, Target, MousePointerClick
+  HelpCircle, BookOpen, Target, MousePointerClick, Trophy
 } from "lucide-react";
 
 /* ---------------- Utilities ---------------- */
@@ -162,7 +162,7 @@ export default function Help() {
             </p>
           </div>
 
-          {/* BACK TO DASHBOARD — now visible in dark mode by default */}
+          {/* BACK TO DASHBOARD */}
           <Link
             to="/dashboard"
             className="hidden md:inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm
@@ -184,7 +184,7 @@ export default function Help() {
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               <ActionTile icon={Sparkles}  title="Start onboarding"  subtitle="Reopen the 3-step guide (⇧ + O)" onClick={fireOnboardingStart}/>
               <ActionTile icon={PlayCircle} title="Load sample data" subtitle="Add demo sessions to explore charts" onClick={fireSeed}/>
-              <ActionTile icon={Bug}       title="Report a bug / request" subtitle="Opens your email client" href="mailto:support@example.com?subject=SmartShooter%20feedback&body=Describe%20the%20issue%20or%20idea..."/>
+              <ActionTile icon={Bug}       title="Report a bug / request" subtitle="Opens your email client" href="mailto:support@example.com?subject=SmartShooter%20feedback&body=Describe%20the%20issue%20or%20idea."/>
               <ActionTile icon={Keyboard}  title="Keyboard shortcuts"     subtitle="Work faster with keys" to="#shortcuts"/>
             </div>
           </Surface>
@@ -218,6 +218,38 @@ export default function Help() {
                       <li><b>Light mode</b> uses stronger axis/grid contrast; dark mode keeps high-contrast labels.</li>
                       <li>Average % is shown in a small pill on the trend card.</li>
                     </ul>
+                  </div>
+                )},
+                // 🆕 XP explanation accordion
+                { title: "Earning XP & Levels", children: (
+                  <div className="space-y-2" id="xp">
+                    <p>
+                      Every training session rewards <b>XP</b> based on your shot volume, accuracy, and drill type.
+                      Your level increases as your total XP grows.
+                    </p>
+                    <ul className="list-disc ml-5 space-y-1">
+                      <li><b>+1 XP</b> per shot attempted.</li>
+                      <li><b>Accuracy bonus</b> (highest tier reached):
+                        <ul className="ml-4 list-disc">
+                          <li>≥ 90% → +50 XP</li>
+                          <li>≥ 80% → +25 XP</li>
+                          <li>≥ 70% → +10 XP</li>
+                        </ul>
+                      </li>
+                      <li><b>Type multipliers</b>:
+                        <ul className="ml-4 list-disc">
+                          <li>Spot ×1.00</li>
+                          <li>Catch &amp; Shoot ×1.05</li>
+                          <li>Off Dribble ×1.20</li>
+                          <li>Run Half Court ×1.50</li>
+                        </ul>
+                      </li>
+                      <li>Formula: <code>(shots + bonus) × multiplier</code>, rounded.</li>
+                      <li>Your current progress appears at the top of the Dashboard.</li>
+                    </ul>
+                    <p className="text-sm text-slate-600 dark:text-neutral-300">
+                      Example: 36 shots at 94% (off-dribble) → (36 + 50) × 1.2 = <b>103 XP</b>.
+                    </p>
                   </div>
                 )},
               ]}/>
@@ -254,6 +286,7 @@ export default function Help() {
               <SideLink to="#basics" label="Guided basics" />
               <SideLink to="#heatmaps" label="Heatmaps" />
               <SideLink to="#trends" label="Trends & bars" />
+              <SideLink to="#xp" label="Earning XP & Levels" />
               <SideLink to="#faq" label="FAQs" />
               <SideLink to="#shortcuts" label="Shortcuts" />
             </nav>
