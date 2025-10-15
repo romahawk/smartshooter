@@ -1,6 +1,5 @@
 // src/pages/Dashboard.jsx
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom"; // ← added
+import { useEffect, useMemo, useRef, useState } from "react";import { Link } from "react-router-dom"; // ← added
 import { useAuthStore } from "../store/useAuthStore";
 import SessionForm from "../components/SessionForm";
 
@@ -46,7 +45,7 @@ import LevelUpToast from "../components/LevelUpToast";
 import { calculateSessionXP } from "../utils/xpCalculator";
 import { getLevelFromXP } from "../config/levels";
 import BadgesPanel from "../components/badges/index.js";
-
+import StreakHeatmap from "../components/StreakHeatmap.jsx";
 
 
 export default function Dashboard() {
@@ -55,8 +54,11 @@ export default function Dashboard() {
   // ---------------- Data ----------------
   const [rows, setRows] = useState([]); // all sessions for the user
 
-  // [XP] Level-up UI flag
-  const [levelUp, setLevelUp] = useState(null); // number | null
+  // [XP] Level-up toast (controlled)
+  const [levelToastOpen, setLevelToastOpen] = useState(false);
+  const [levelReached, setLevelReached] = useState(null); // number | null
+  const prevLevelRef = useRef(0);
+  const mountedRef = useRef(false);
 
   // ---------------- Loading ----------------
   const [isLoading, setIsLoading] = useState(false);
@@ -207,8 +209,22 @@ export default function Dashboard() {
       return sum + xp;
     }, 0);
   }, [rows]);
-  
+
   const currentLevel = useMemo(() => getLevelFromXP(totalXP), [totalXP]);
+
+  // 🔔 Trigger LevelUp toast ONLY when level increases (not on first mount)
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      prevLevelRef.current = currentLevel; // initialize baseline
+      return;
+    }
+    if (currentLevel > prevLevelRef.current) {
+      setLevelReached(currentLevel);
+      setLevelToastOpen(true);
+    }
+    prevLevelRef.current = currentLevel;
+  }, [currentLevel]);
 
   const onSave = async (data) => {
     try {
@@ -232,8 +248,6 @@ export default function Dashboard() {
       // attach xpEarned to session record
       payload.xpEarned = xp;
 
-      const prevLevel = currentLevel; // before save
-
       if (editing?.id) {
         await updateSession(editing.id, payload);
         toast.success(`Session updated • +${xp} XP`);
@@ -246,12 +260,6 @@ export default function Dashboard() {
 
       // reload -> recompute totalXP/level
       await load();
-
-      // detect level-up after new total is loaded
-      const afterLevel = getLevelFromXP(
-        rows.reduce((a, r) => a + Number(r?.xpEarned || 0), 0) + xp
-      );
-      if (afterLevel > prevLevel) setLevelUp(afterLevel);
     } catch (e) {
       console.error("Save failed:", e);
       toast.error(e?.message || "Failed to save session");
@@ -426,6 +434,7 @@ export default function Dashboard() {
           showSkelTrend={showSkelTrend}
           showSkelBar={showSkelBar}
           userUid={user?.uid}
+          sessions={rows}
         />
       )}
 
@@ -445,11 +454,18 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* [XP] Level-up toast */}
-      {levelUp && <LevelUpToast level={levelUp} onClose={() => setLevelUp(null)} />}
+      {/* [XP] Level-up toast (controlled) */}
+      <LevelUpToast
+        open={levelToastOpen}
+        onOpenChange={setLevelToastOpen}
+        level={levelReached ?? currentLevel}
+        duration={4000}
+        milestone={(levelReached ?? currentLevel) % 5 === 0}
+      />
     </div>
   );
 }
+
 
 /* ---------------- Log (table) ---------------- */
 
@@ -739,7 +755,8 @@ function AnalyticsSection({
   showSkelHeat,
   showSkelTrend,
   showSkelBar,
-  userUid, // ⬅️ new
+  userUid, 
+  sessions,
 }) {
   return (
     <div className="space-y-4 md:space-y-6">
@@ -771,6 +788,13 @@ function AnalyticsSection({
         {/* Milestone Badges */}
         <div className="mt-6">
           <BadgesPanel uid={userUid} />
+        </div>
+        <div className="mt-4 border rounded-2xl p-4 dark:bg-neutral-800 dark:border-neutral-700">
+          <StreakHeatmap
+            sessions={sessions}
+            weeks={17}
+            title="Calendar Streak (last ~4 months)"
+          />
         </div>
       </div>
 
