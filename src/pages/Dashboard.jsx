@@ -1,5 +1,6 @@
 // src/pages/Dashboard.jsx
-import { useEffect, useMemo, useRef, useState } from "react";import { Link } from "react-router-dom"; // ← added
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom"; // ← added
 import { useAuthStore } from "../store/useAuthStore";
 import SessionForm from "../components/SessionForm";
 
@@ -83,6 +84,8 @@ export default function Dashboard() {
   }, []);
 
   const normalizeDir = (d) => (d ? String(d).replace("->", "→") : undefined);
+  const toISO = (d) => new Date(d).toISOString().slice(0, 10);
+  const addDays = (iso, n) => toISO(new Date(iso + "T00:00:00Z").getTime() + n * 86400000);
 
   // ---------------- Analytics filters (DEFAULT = last 7 days) ----------------
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -216,7 +219,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!mountedRef.current) {
       mountedRef.current = true;
-      prevLevelRef.current = currentLevel; // initialize baseline
+      prevLevelRef.current = currentLevel; // baseline
       return;
     }
     if (currentLevel > prevLevelRef.current) {
@@ -270,9 +273,12 @@ export default function Dashboard() {
   const filtered = useMemo(
     () =>
       filterSessions(rows, {
+        // keep start inclusive as-is
         from: filters.dateFrom,
-        to: filters.dateTo,
-        types: filters.types,
+        // make end inclusive by pushing the exclusive bound by +1 day
+        to: addDays(filters.dateTo, 1),
+        types: filters.types && filters.types.length ? filters.types : undefined,
+        // [] should mean "all types" → pass undefined when empty
       }),
     [rows, filters.dateFrom, filters.dateTo, filters.types]
   );
@@ -434,7 +440,7 @@ export default function Dashboard() {
           showSkelTrend={showSkelTrend}
           showSkelBar={showSkelBar}
           userUid={user?.uid}
-          sessions={rows}
+          sessions={filtered}
         />
       )}
 
